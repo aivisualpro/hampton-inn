@@ -4,7 +4,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import {
   Table,
   TableBody,
@@ -55,7 +55,7 @@ type Item = {
 
 import { useSearchParams } from "next/navigation";
 
-export default function ItemsPage() {
+function ItemsContent() {
   const searchParams = useSearchParams();
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
@@ -315,7 +315,9 @@ export default function ItemsPage() {
               {/* Route Header (Search & Actions) - Approx 5-6% */}
               <div className="flex-none h-[6%] min-h-[50px] border-b flex items-center justify-between gap-4 px-4 bg-white z-20">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Link href="/admin" className="hover:text-primary hover:underline">Home</Link>
+                  <Link href="/" className="hover:text-primary hover:underline">Home</Link>
+                  <ChevronRight className="h-4 w-4" />
+                  <Link href="/admin" className="hover:text-primary hover:underline">Admin</Link>
                   <ChevronRight className="h-4 w-4" />
                   <span className="font-medium text-foreground">Items</span>
                 </div>
@@ -917,5 +919,17 @@ export default function ItemsPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+export default function ItemsPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center p-8">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    }>
+      <ItemsContent />
+    </Suspense>
   );
 }

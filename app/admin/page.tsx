@@ -5,7 +5,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Users, Package, Settings as SettingsIcon, MapPin, ChevronRight, Droplets } from "lucide-react";
+import { Users, Package, Settings as SettingsIcon, MapPin, ChevronRight, Droplets, History } from "lucide-react";
 import Link from "next/link"; // Although we'll likely click through, for now just cards
 
 export default function AdminPage() {
@@ -41,6 +41,14 @@ export default function AdminPage() {
       color: "text-orange-600",
       image: "/bg_items.png",
       href: "/admin/items",
+    },
+    {
+      title: "Transactions",
+      description: "View transaction history",
+      icon: History,
+      color: "text-purple-600",
+      image: "", // Placeholder or generate later
+      href: "/admin/transactions",
     },
 
   ];

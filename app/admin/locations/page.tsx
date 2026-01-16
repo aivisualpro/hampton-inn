@@ -348,7 +348,9 @@ export default function LocationsPage() {
       {/* Header with Breadcrumbs & Search */}
       <div className="flex-none h-[6%] min-h-[50px] border-b flex items-center justify-between gap-4 px-4 bg-white z-20">
         <div className="flex items-center gap-2 text-sm text-muted-foreground mr-4">
-          <Link href="/admin" className="hover:text-primary hover:underline">Home</Link>
+          <Link href="/" className="hover:text-primary hover:underline">Home</Link>
+          <ChevronRight className="h-4 w-4" />
+          <Link href="/admin" className="hover:text-primary hover:underline">Admin</Link>
           <ChevronRight className="h-4 w-4" />
           <span className="font-medium text-foreground">Locations</span>
         </div>

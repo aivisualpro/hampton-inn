@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
 import User from "@/models/User";
+import bcrypt from "bcryptjs";
 
 export async function GET(
   request: Request,
@@ -10,7 +11,7 @@ export async function GET(
   try {
     const { id } = await params;
     await connectToDatabase();
-    const user = await User.findById(id);
+    const user = await User.findById(id).select("-password");
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -32,10 +33,19 @@ export async function PUT(
     await connectToDatabase();
     const body = await request.json();
 
+    // Hash password if updating
+    if (body.password) {
+      const salt = await bcrypt.genSalt(10);
+      body.password = await bcrypt.hash(body.password, salt);
+    } else {
+      // If empty or undefined, remove it so we don't overwrite with blank
+      delete body.password;
+    }
+
     const updatedUser = await User.findByIdAndUpdate(id, body, {
       new: true,
       runValidators: true,
-    });
+    }).select("-password");
 
     if (!updatedUser) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });

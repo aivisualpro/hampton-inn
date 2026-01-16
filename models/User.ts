@@ -4,6 +4,7 @@ import mongoose, { Schema, Document, Model } from "mongoose";
 export interface IUser extends Document {
   name: string;
   email: string;
+  password?: string;
   phone: string;
   role: string;
   locations: string[];
@@ -15,6 +16,7 @@ const UserSchema: Schema = new Schema(
   {
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true },
+    password: { type: String, required: false }, // Optional for now to support existing users, but logic should enforce it
     phone: { type: String, required: false },
     role: { type: String, required: true, default: "Staff" },
     locations: { type: [String], default: [] },

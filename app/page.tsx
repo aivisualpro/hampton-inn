@@ -43,6 +43,7 @@ export default function Home() {
       color: "text-blue-600",
       image: "/bg_stock_count.png",
       value: "124 Items",
+      href: "/stock-count",
     },
     {
       title: "Soak Cycle",
@@ -51,6 +52,7 @@ export default function Home() {
       color: "text-cyan-600",
       image: "/bg_soak_cycle.png",
       value: "Active",
+      href: "/admin/soak-cycle",
     },
     {
       title: "Stock Purchase",

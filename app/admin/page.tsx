@@ -5,7 +5,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Users, Package, Settings as SettingsIcon } from "lucide-react";
+import { Users, Package, Settings as SettingsIcon, MapPin, ChevronRight, Droplets } from "lucide-react";
 import Link from "next/link"; // Although we'll likely click through, for now just cards
 
 export default function AdminPage() {
@@ -19,14 +19,6 @@ export default function AdminPage() {
       href: "/admin/users",
     },
     {
-      title: "Items",
-      description: "Manage inventory items",
-      icon: Package,
-      color: "text-orange-600",
-      image: "/bg_items.png",
-      href: "/admin/items",
-    },
-    {
       title: "Settings",
       description: "System configuration",
       icon: SettingsIcon,
@@ -34,17 +26,38 @@ export default function AdminPage() {
       image: "/bg_settings.png",
       href: "/admin/settings",
     },
+    {
+      title: "Locations",
+      description: "Manage locations",
+      icon: MapPin,
+      color: "text-teal-600",
+      image: "/bg_locations.png",
+      href: "/admin/locations",
+    },
+    {
+      title: "Items",
+      description: "Manage inventory items",
+      icon: Package,
+      color: "text-orange-600",
+      image: "/bg_items.png",
+      href: "/admin/items",
+    },
+
   ];
 
   return (
-    <div className="container mx-auto p-4 md:p-6 mt-6">
-       <div className="mb-6 flex items-center gap-2 text-muted-foreground text-sm">
-         <Link href="/" className="hover:text-foreground">Home</Link>
-         <span>/</span>
-         <span className="text-foreground">Administration</span>
-       </div>
+    <div className="h-full flex flex-col">
+      {/* Header with Breadcrumbs */}
+      <div className="flex-none h-[6%] min-h-[50px] border-b flex items-center justify-between gap-4 px-4 bg-white z-20">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Link href="/" className="hover:text-primary hover:underline">Home</Link>
+          <ChevronRight className="h-4 w-4" />
+          <span className="font-medium text-foreground">Administration</span>
+        </div>
+      </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+      <div className="flex-1 overflow-auto p-4 md:p-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
         {modules.map((module) => (
           <Link href={module.href} key={module.title} className="block group">
             <Card
@@ -71,6 +84,7 @@ export default function AdminPage() {
             </Card>
           </Link>
         ))}
+        </div>
       </div>
     </div>
   );

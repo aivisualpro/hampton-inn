@@ -11,7 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, Plus, Pencil, Trash2, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,6 +21,7 @@ import {
   DialogTitle,
   DialogTrigger,
   DialogFooter,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,6 +33,167 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import { Check, ChevronsUpDown } from "lucide-react"
+import { cn } from "@/lib/utils"
+
+function RoleCombobox({ value, onChange }: { value: string, onChange: (val: string) => void }) {
+  const [open, setOpen] = useState(false)
+  
+  // Default roles
+  const [roles, setRoles] = useState([
+    "Admin",
+    "Manager",
+    "Staff",
+    "Supervisor",
+    "Housekeeper"
+  ])
+  
+  const [inputValue, setInputValue] = useState("")
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between"
+        >
+          {value
+            ? value
+            : "Select role..."}
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[300px] p-0">
+        <Command>
+          <CommandInput placeholder="Search role..." value={inputValue} onValueChange={setInputValue} />
+          <CommandList>
+            <CommandEmpty>
+               <div className="p-2 cursor-pointer text-sm" onClick={() => {
+                  setRoles([...roles, inputValue])
+                  onChange(inputValue)
+                  setOpen(false)
+               }}>
+                 Create role: <span className="font-bold">"{inputValue}"</span>
+               </div>
+            </CommandEmpty>
+            <CommandGroup>
+              {roles.map((role) => (
+                <CommandItem
+                  key={role}
+                  value={role}
+                  onSelect={(currentValue) => {
+                    onChange(currentValue === value ? "" : role) // Use original casing from roles array
+                    setOpen(false)
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 h-4 w-4",
+                      value === role ? "opacity-100" : "opacity-0"
+                    )}
+                  />
+                  {role}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
+function LocationsMultiSelect({ 
+  value, 
+  onChange, 
+  options 
+}: { 
+  value: string[], 
+  onChange: (val: string[]) => void,
+  options: string[] 
+}) {
+  const [open, setOpen] = useState(false)
+  const [inputValue, setInputValue] = useState("")
+
+  const handleSelect = (currentValue: string) => {
+    const isSelected = value.includes(currentValue)
+    if (isSelected) {
+      onChange(value.filter((v) => v !== currentValue))
+    } else {
+      onChange([...value, currentValue])
+    }
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between h-auto min-h-[40px] py-1 px-3"
+        >
+          {value.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {value.map((val) => (
+                <Badge key={val} variant="secondary" className="mr-1 mb-1">
+                  {val}
+                </Badge>
+              ))}
+            </div>
+          ) : (
+            "Select locations..."
+          )}
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[300px] p-0">
+        <Command>
+          <CommandInput placeholder="Search locations..." value={inputValue} onValueChange={setInputValue} />
+          <CommandList>
+            <CommandEmpty>No location found.</CommandEmpty>
+            <CommandGroup>
+              {options.map((option) => (
+                <CommandItem
+                  key={option}
+                  value={option}
+                  onSelect={(currentValue) => {
+                     // Find the exact casing from options
+                     const exactOption = options.find(o => o.toLowerCase() === currentValue.toLowerCase()) || currentValue;
+                     handleSelect(exactOption);
+                  }}
+                >
+                  <Check
+                    className={cn(
+                      "mr-2 h-4 w-4",
+                      value.includes(option) ? "opacity-100" : "opacity-0"
+                    )}
+                  />
+                  {option}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  )
+}
 
 type User = {
   _id: string;
@@ -44,6 +206,7 @@ type User = {
 
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
+  const [availableLocations, setAvailableLocations] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -54,7 +217,8 @@ export default function UsersPage() {
     email: "",
     phone: "",
     role: "Staff",
-    locations: "",
+    locations: [] as string[],
+    password: "",
   });
   const [formLoading, setFormLoading] = useState(false);
 
@@ -73,8 +237,21 @@ export default function UsersPage() {
     }
   };
 
+  const fetchLocations = async () => {
+    try {
+      const response = await fetch("/api/locations");
+      if (response.ok) {
+        const data = await response.json();
+        setAvailableLocations(data.map((l: any) => l.name));
+      }
+    } catch (error) {
+      console.error("Error fetching locations:", error);
+    }
+  };
+
   useEffect(() => {
     fetchUsers();
+    fetchLocations();
   }, []);
 
   const handleOpenDialog = (user?: User) => {
@@ -85,7 +262,8 @@ export default function UsersPage() {
         email: user.email,
         phone: user.phone || "",
         role: user.role,
-        locations: user.locations.join(", "),
+        locations: user.locations || [],
+        password: "", // Password is never loaded back
       });
     } else {
       setEditingUser(null);
@@ -94,7 +272,8 @@ export default function UsersPage() {
         email: "",
         phone: "",
         role: "Staff",
-        locations: "",
+        locations: [],
+        password: "",
       });
     }
     setIsDialogOpen(true);
@@ -112,7 +291,7 @@ export default function UsersPage() {
 
     const payload = {
       ...formData,
-      locations: formData.locations.split(",").map((s) => s.trim()).filter(Boolean),
+      locations: formData.locations,
     };
 
     try {
@@ -156,17 +335,11 @@ export default function UsersPage() {
 
   return (
     <div className="w-full h-full p-0 flex flex-col">
-      {/* Action Bar */}
-      <div className="p-4 border-b flex justify-end bg-white">
-          <Button onClick={() => handleOpenDialog()} className="h-8 text-xs">
-            <Plus className="mr-2 h-3.5 w-3.5" />
-            Add User
-          </Button>
-      </div>
-
-      <Card className="border-none shadow-none bg-transparent rounded-none flex-1 overflow-auto">
+      <Card className="border-none shadow-none bg-transparent rounded-none flex-1 overflow-auto mb-20 md:mb-0 p-0 gap-0">
         <CardContent className="px-0 py-0 h-full">
-          <div className="border-0 bg-white min-h-full">
+          <div className="border-0 bg-transparent min-h-full">
+            {/* Desktop Table View */}
+            <div className="hidden md:block bg-white h-full">
             <Table>
               <TableHeader className="bg-muted/50 sticky top-0 z-10">
                 <TableRow className="hover:bg-muted/50 border-b">
@@ -252,14 +425,96 @@ export default function UsersPage() {
                 )}
               </TableBody>
             </Table>
+            </div>
+
+            {/* Mobile Card View */}
+            <div className="md:hidden space-y-4 p-4 pb-24">
+              {loading ? (
+                 <div className="flex items-center justify-center py-8">
+                    <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                 </div>
+              ) : users.length === 0 ? (
+                 <div className="text-center text-muted-foreground py-8">
+                   No users found.
+                 </div>
+              ) : (
+                users.map((user) => (
+                  <Card key={user._id} className="bg-white shadow-sm border">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                       <CardTitle className="text-base font-bold">
+                         {user.name}
+                       </CardTitle>
+                       <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" className="h-8 w-8 p-0 -mr-2">
+                              <span className="sr-only">Open menu</span>
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => handleOpenDialog(user)}>
+                              <Pencil className="mr-2 h-4 w-4" />
+                              Edit
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem 
+                              className="text-red-600 focus:text-red-600"
+                              onClick={() => handleDelete(user._id)}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid gap-2 text-sm">
+                        <div className="flex items-center text-muted-foreground">
+                           <span className="font-medium mr-2 text-foreground">Email:</span> {user.email}
+                        </div>
+                        {user.phone && (
+                          <div className="flex items-center text-muted-foreground">
+                             <span className="font-medium mr-2 text-foreground">Phone:</span> {user.phone}
+                          </div>
+                        )}
+                        <div className="flex items-center">
+                           <Badge variant="secondary" className="font-normal capitalize mr-2">
+                              {user.role}
+                           </Badge>
+                        </div>
+                        {user.locations && user.locations.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                             {user.locations.map((loc, i) => (
+                               <Badge key={i} variant="outline" className="text-xs font-normal">
+                                 {loc}
+                               </Badge>
+                             ))}
+                          </div>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>
+
+      {/* Floating Action Button */}
+      <Button
+        onClick={() => handleOpenDialog()}
+        className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg z-50 p-0"
+      >
+        <Plus className="h-6 w-6" />
+        <span className="sr-only">Add User</span>
+      </Button>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>{editingUser ? "Edit User" : "Add User"}</DialogTitle>
+            <DialogDescription></DialogDescription>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="grid gap-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4">
@@ -302,25 +557,37 @@ export default function UsersPage() {
               <Label htmlFor="role" className="text-right">
                 Role
               </Label>
-              <Input
-                id="role"
-                value={formData.role}
-                onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                className="col-span-3"
-                placeholder="e.g. Admin, Staff, Manager"
-                required
-              />
+              <div className="col-span-3">
+                 <RoleCombobox 
+                    value={formData.role} 
+                    onChange={(val) => setFormData({ ...formData, role: val })} 
+                 />
+              </div>
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="locations" className="text-right">
                 Locations
               </Label>
+              <div className="col-span-3">
+                 <LocationsMultiSelect 
+                   value={formData.locations}
+                   options={availableLocations}
+                   onChange={(val) => setFormData({ ...formData, locations: val })}
+                 />
+              </div>
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="password" className="text-right">
+                Password
+              </Label>
               <Input
-                id="locations"
-                value={formData.locations}
-                onChange={(e) => setFormData({ ...formData, locations: e.target.value })}
+                id="password"
+                type="password"
+                value={formData.password}
+                onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 className="col-span-3"
-                placeholder="Comma separated"
+                placeholder={editingUser ? "Leave blank to keep current" : "Required for login"}
+                required={!editingUser}
               />
             </div>
             <DialogFooter>

@@ -1,5 +1,5 @@
-
 import { NextRequest, NextResponse } from "next/server";
+import mongoose from "mongoose";
 import dbConnect from "@/lib/db";
 import Transaction from "@/models/Transaction";
 
@@ -15,18 +15,24 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Date and location required" }, { status: 400 });
     }
 
-    const date = new Date(dateStr);
-    // Set to start of the day to ensure specific hour filtering doesn't mess up "before this date" logic
-    // Actually we want strictly BEFORE this date's start (00:00:00).
-    date.setHours(0, 0, 0, 0);
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day)); // Strict UTC Midnight
+
+    const matchQuery: any = {
+      date: { $lt: date }
+    };
+
+    // Handle Location as String or ObjectId to be safe in Aggregation
+    if (mongoose.Types.ObjectId.isValid(location)) {
+       matchQuery.location = { $in: [location, new mongoose.Types.ObjectId(location)] };
+    } else {
+       matchQuery.location = location;
+    }
 
     const openingBalances = await Transaction.aggregate([
       // 1. Match transactions for filtered location and strictly BEFORE the selected date
       { 
-        $match: { 
-          location: location,
-          date: { $lt: date } 
-        } 
+        $match: matchQuery
       },
       
       // 2. Sort to get the latest transaction first

@@ -15,11 +15,13 @@ export async function GET(request: NextRequest) {
     const query: any = {};
     
     if (date) {
-      // Match transactions for the specific date
-      const startOfDay = new Date(date);
-      startOfDay.setHours(0, 0, 0, 0);
-      const endOfDay = new Date(date);
-      endOfDay.setHours(23, 59, 59, 999);
+      // Create UTC date range for the specific day
+      // Parse YYYY-MM-DD manually to ensure UTC
+      const [year, month, day] = date.split('-').map(Number);
+      
+      const startOfDay = new Date(Date.UTC(year, month - 1, day));
+      const endOfDay = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999));
+      
       query.date = { $gte: startOfDay, $lte: endOfDay };
     }
     
@@ -54,9 +56,9 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Create date range for the specific day
-    const transactionDate = new Date(date);
-    transactionDate.setHours(0, 0, 0, 0);
+    // Create UTC date for the specific day
+    const [year, month, day] = date.split('-').map(Number);
+    const transactionDate = new Date(Date.UTC(year, month - 1, day));
     
     // Upsert: Update if exists for same date/item/location, otherwise create
     const transaction = await Transaction.findOneAndUpdate(

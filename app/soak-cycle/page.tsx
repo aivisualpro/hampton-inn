@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { Loader2, Calendar, Save, ChevronRight, ChevronLeft, Search } from "lucide-react";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import { Loader2, Calendar, Save, ChevronRight, ChevronLeft, Search, Edit2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -33,24 +34,63 @@ type SoakCycleItem = Item & {
   disposedUnit: number;
 };
 
+const calculateTotal = (item: SoakCycleItem) => {
+    return (item.previousBalance || 0) + (item.soakUnit || 0) - (item.disposedUnit || 0);
+};
+
 export default function SoakCyclePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const [items, setItems] = useState<SoakCycleItem[]>([]);
   const [laundryLocationId, setLaundryLocationId] = useState<string | null>(null);
-  const [selectedDate, setSelectedDate] = useState<string>(
-    new Date().toISOString().split("T")[0]
-  );
-  
-  // Pagination & Search State
-  const [searchQuery, setSearchQuery] = useState("");
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  // Get date from URL or default to today (Local Time safe)
+  const getDateFromUrl = () => {
+    const paramDate = searchParams.get("date");
+    if (paramDate) return paramDate;
+    
+    // Default to today in YYYY-MM-DD
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const selectedDate = getDateFromUrl();
+  const searchQuery = searchParams.get("q") || "";
+
+  // Helper to update URL
+  const updateUrl = (key: string, value: string | null) => {
+      const params = new URLSearchParams(searchParams);
+      if (value) {
+          params.set(key, value);
+      } else {
+          params.delete(key);
+      }
+      router.replace(`${pathname}?${params.toString()}`);
+  };  
+
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
 
   // Filter & Paginate
   const filteredItems = items.filter((item) => 
     item.item.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  ).sort((a, b) => {
+      // 1. Sort by Total (Descending)
+      const totalA = calculateTotal(a);
+      const totalB = calculateTotal(b);
+      if (totalB !== totalA) {
+          return totalB - totalA;
+      }
+      // 2. Sort by Item Name (Ascending)
+      return a.item.localeCompare(b.item);
+  });
 
   const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
   const paginatedItems = filteredItems.slice(
@@ -98,6 +138,7 @@ export default function SoakCyclePage() {
         // Initialize state with these items (values 0 for now)
         const initializedItems = laundryItems.map((item: any) => ({
           ...item,
+          previousBalance: 0,
           countedUnit: 0,
           soakUnit: 0,
           disposedUnit: 0,
@@ -117,45 +158,13 @@ export default function SoakCyclePage() {
 
   // Fetch Transactions for selected date and merge with items
   const fetchTransactions = useCallback(async () => {
-    if (!laundryLocationId || !items.length) return;
-    
-    try {
-      setLoading(true);
-      const params = new URLSearchParams({
-        date: selectedDate,
-        location: laundryLocationId,
-      });
-      
-      const res = await fetch(`/api/transactions?${params}`);
-      if (!res.ok) throw new Error("Failed to fetch transactions");
-      const transactions: Transaction[] = await res.json();
-      
-      // Update items with transaction data
-      setItems(prevItems => prevItems.map(item => {
-        const trans = transactions.find(t => t.item === item._id);
-        return {
-          ...item,
-          countedUnit: trans?.countedUnit || 0,
-          soakUnit: trans?.soakUnit || 0,
-          disposedUnit: trans?.consumedUnit || 0,
-        };
-      }));
-      
-    } catch (error) {
-      console.error("Error fetching transactions:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, [laundryLocationId, selectedDate, items.length]); // Added items.length to dependency to ensure we have items first
+    // Legacy function, replaced by loadValues in useEffect below
+    // Kept for reference or removed if unused
+  }, []); 
 
-  // Trigger fetch when date or location changes, but only if items are already loaded (initially)
+  // Trigger fetch when date or location changes, OR when items are first loaded
   useEffect(() => {
     if (laundryLocationId && items.length > 0) {
-        // We need a separate fetching logic that doesn't depend on items to avoid infinite loop if we were setting items there
-        // But here we are just updating values. 
-        // Actually best pattern: Separate "Config" (Items) from "Data" (Transactions).
-        // For simplicity, I'm merging them in state.
-        
         // Helper to just fetch data and merge
         const loadValues = async () => {
             try {
@@ -176,20 +185,32 @@ export default function SoakCyclePage() {
               
               setItems(currentItems => currentItems.map(item => {
                 // Find previous balance
-                const prevRecord = openingBalances.find((b: any) => b.item === item._id);
-                const previousBalance = prevRecord?.openingBalance || 0;
+                let previousBalance = 0;
+                if (Array.isArray(openingBalances)) {
+                    const prevRecord = openingBalances.find((b: any) => b.item === item._id);
+                    previousBalance = prevRecord?.openingBalance || 0;
+                }
 
                 // Find current transaction values
-                const trans = transactions.find((t: any) => t.item === item._id);
+                let soakUnit = 0; 
+                let disposedUnit = 0;
                 
+                if (Array.isArray(transactions)) {
+                    const trans = transactions.find((t: any) => t.item === item._id);
+                    soakUnit = trans?.soakUnit || 0;
+                    disposedUnit = trans?.consumedUnit || 0;
+                }
+                
+                // Only update if changed to avoid unnecessary re-renders if we were using items in dep array (which we are not fully, just length)
+                if (item.previousBalance === previousBalance && item.soakUnit === soakUnit && item.disposedUnit === disposedUnit) {
+                    return item;
+                }
+
                 return {
                     ...item,
-                    previousBalance: previousBalance,
-                    soakUnit: trans?.soakUnit || 0,
-                    disposedUnit: trans?.consumedUnit || 0,
-                    // Note: We don't need to load 'countedUnit' (Total) for display state, 
-                    // as it is derived from (Prev + Soak - Disposed).
-                    // However, we could check if it matches for integrity.
+                    previousBalance,
+                    soakUnit,
+                    disposedUnit,
                 };
               }));
             } catch(e) { 
@@ -200,7 +221,7 @@ export default function SoakCyclePage() {
         };
         loadValues();
     }
-  }, [selectedDate, laundryLocationId]); // Removed items dependency to avoid loops, only re-fetch values on date/loc change
+  }, [selectedDate, laundryLocationId, items.length]);
 
 
   const handleValueChange = (id: string, field: keyof SoakCycleItem, value: string) => {
@@ -214,7 +235,14 @@ export default function SoakCyclePage() {
     if (!laundryLocationId) return;
     setSaving(true);
     try {
-      const promises = items.map(item => {
+      // Filter items: Don't add transaction if Soak, Disposed, and Total are all 0
+      const itemsToSave = items.filter(item => {
+        const total = calculateTotal(item);
+        const hasValue = item.soakUnit !== 0 || item.disposedUnit !== 0 || total !== 0;
+        return hasValue;
+      });
+
+      const promises = itemsToSave.map(item => {
         return fetch("/api/transactions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -235,17 +263,11 @@ export default function SoakCyclePage() {
       console.error("Error saving data:", error);
     } finally {
       setSaving(false);
+      setIsEditing(false); // Exit edit mode on success
     }
   };
 
-  // Helper to calculate total
-  const calculateTotal = (item: SoakCycleItem) => {
-    // Formula: Units Available (Previous Balance) + Soak Cycle - Disposed
-    // Note: Implicitly, 'Units Available' meant 'Clean on Shelf'.
-    // If Soak is ADDITIVE (coming back clean), then + Soak.
-    // If Disposed is SUBTRACTIVE (thrown away), then - Disposed.
-    return (item.previousBalance || 0) + (item.soakUnit || 0) - (item.disposedUnit || 0);
-  };
+
 
   if (!laundryLocationId && !loading) {
      return (
@@ -264,8 +286,6 @@ export default function SoakCyclePage() {
         <div className="flex items-center gap-2 text-sm text-muted-foreground mr-4">
           <Link href="/" className="hover:text-primary hover:underline">Home</Link>
           <ChevronRight className="h-4 w-4" />
-          <Link href="/admin" className="hover:text-primary hover:underline">Admin</Link>
-          <ChevronRight className="h-4 w-4" />
           <span className="font-medium text-foreground">Soak Cycle</span>
         </div>
 
@@ -277,34 +297,56 @@ export default function SoakCyclePage() {
                placeholder="Search items..."
                className="w-full bg-background pl-8 h-8 text-sm"
                value={searchQuery}
-               onChange={(e) => setSearchQuery(e.target.value)}
-             />
+               onChange={(e) => updateUrl("q", e.target.value)}
+              />
         </div>
         
-        <div className="flex items-center gap-3">
+
+            <div className="flex items-center gap-3">
             <div className="flex items-center gap-2">
               <Calendar className="h-4 w-4 text-muted-foreground" />
               <Input
                 type="date"
                 value={selectedDate}
-                onChange={(e) => setSelectedDate(e.target.value)}
+                onChange={(e) => updateUrl("date", e.target.value)}
                 className="w-auto h-8"
               />
             </div>
-            <Button size="sm" onClick={handleSave} disabled={saving || loading}>
-                {saving ? (
-                    <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Saving...
-                    </>
-                ) : (
-                    <>
-                        <Save className="mr-2 h-4 w-4" />
-                        Save
-                    </>
-                )}
-            </Button>
+            
+            {isEditing ? (
+                <>
+                     <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => setIsEditing(false)}
+                        disabled={saving}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                     >
+                        <X className="mr-2 h-4 w-4" />
+                        Cancel
+                    </Button>
+                    <Button size="sm" onClick={handleSave} disabled={saving || loading}>
+                        {saving ? (
+                            <>
+                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                Saving...
+                            </>
+                        ) : (
+                            <>
+                                <Save className="mr-2 h-4 w-4" />
+                                Save
+                            </>
+                        )}
+                    </Button>
+                </>
+            ) : (
+                <Button size="sm" onClick={() => setIsEditing(true)} disabled={loading}>
+                    <Edit2 className="mr-2 h-4 w-4" />
+                    Update Records
+                </Button>
+            )}
         </div>
+
       </div>
 
       {/* Content */}
@@ -314,10 +356,10 @@ export default function SoakCyclePage() {
                     <TableHeader className="bg-white sticky top-0 z-10 shadow-sm">
                         <TableRow className="hover:bg-muted/50 border-b">
                             <TableHead className="w-[30%] bg-white pl-4">Items</TableHead>
-                            <TableHead className="text-center bg-gray-100/50">Units Available</TableHead>
+                            <TableHead className="text-center bg-gray-100/50">Opening Balance</TableHead>
                             <TableHead className="text-center bg-yellow-100/50">Soak Cycle</TableHead>
                             <TableHead className="text-center bg-white">Disposed</TableHead>
-                            <TableHead className="text-center font-bold bg-white">Total</TableHead>
+                            <TableHead className="text-center font-bold bg-white">Closing Balance</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -346,20 +388,32 @@ export default function SoakCyclePage() {
                                         </div>
                                     </TableCell>
                                     <TableCell className="text-center p-1 bg-yellow-50/30">
-                                        <Input
-                                            type="number"
-                                            className="w-20 mx-auto text-center h-8 bg-yellow-100/50 border-yellow-200 focus-visible:ring-yellow-400"
-                                            value={item.soakUnit}
-                                            onChange={(e) => handleValueChange(item._id, "soakUnit", e.target.value)}
-                                        />
+                                        {isEditing ? (
+                                            <Input
+                                                type="number"
+                                                className="w-20 mx-auto text-center h-8 bg-yellow-100/50 border-yellow-200 focus-visible:ring-yellow-400"
+                                                value={item.soakUnit}
+                                                onChange={(e) => handleValueChange(item._id, "soakUnit", e.target.value)}
+                                            />
+                                        ) : (
+                                            <div className="w-20 mx-auto text-center h-8 flex items-center justify-center font-medium">
+                                                {item.soakUnit}
+                                            </div>
+                                        )}
                                     </TableCell>
                                     <TableCell className="text-center p-1">
-                                        <Input
-                                            type="number"
-                                            className="w-20 mx-auto text-center h-8"
-                                            value={item.disposedUnit}
-                                            onChange={(e) => handleValueChange(item._id, "disposedUnit", e.target.value)}
-                                        />
+                                         {isEditing ? (
+                                            <Input
+                                                type="number"
+                                                className="w-20 mx-auto text-center h-8"
+                                                value={item.disposedUnit}
+                                                onChange={(e) => handleValueChange(item._id, "disposedUnit", e.target.value)}
+                                            />
+                                         ) : (
+                                            <div className="w-20 mx-auto text-center h-8 flex items-center justify-center font-medium">
+                                                {item.disposedUnit}
+                                            </div>
+                                         )}
                                     </TableCell>
                                     <TableCell className="text-center font-bold text-lg">
                                         {calculateTotal(item)}

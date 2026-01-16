@@ -12,7 +12,8 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Plus, Pencil, Trash2, MoreHorizontal } from "lucide-react";
+import { Loader2, Plus, Pencil, Trash2, MoreHorizontal, ChevronRight, Search } from "lucide-react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -221,6 +222,16 @@ export default function UsersPage() {
     password: "",
   });
   const [formLoading, setFormLoading] = useState(false);
+  
+  // Search state
+  const [searchQuery, setSearchQuery] = useState("");
+  
+  // Filter users
+  const filteredUsers = users.filter((user) => 
+    user.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    user.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    user.role.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -334,10 +345,40 @@ export default function UsersPage() {
   };
 
   return (
-    <div className="w-full h-full p-0 flex flex-col">
-      <Card className="border-none shadow-none bg-transparent rounded-none flex-1 overflow-auto mb-20 md:mb-0 p-0 gap-0">
-        <CardContent className="px-0 py-0 h-full">
-          <div className="border-0 bg-transparent min-h-full">
+    <div className="h-full flex flex-col">
+       {/* Header with Breadcrumbs & Search */}
+      <div className="flex-none h-[6%] min-h-[50px] border-b flex items-center justify-between gap-4 px-4 bg-white z-20">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground mr-4">
+          <Link href="/" className="hover:text-primary hover:underline">Home</Link>
+          <ChevronRight className="h-4 w-4" />
+          <Link href="/admin" className="hover:text-primary hover:underline">Admin</Link>
+          <ChevronRight className="h-4 w-4" />
+          <span className="font-medium text-foreground">Users</span>
+        </div>
+        
+        <div className="flex items-center gap-2 flex-1 justify-end">
+             <div className="relative max-w-sm w-full md:w-64">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="search"
+                  placeholder="Search users..."
+                  className="w-full bg-background pl-8 h-8 text-sm"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+           </div>
+           
+           <Button onClick={() => handleOpenDialog()} size="sm" className="h-8">
+              <Plus className="mr-2 h-4 w-4" />
+              Add User
+           </Button>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-auto p-0">
+      <Card className="border-0 shadow-none bg-transparent rounded-none h-full flex flex-col">
+        <CardContent className="p-0 flex-1">
+          <div className="border-0 bg-transparent h-full">
             {/* Desktop Table View */}
             <div className="hidden md:block bg-white h-full">
             <Table>
@@ -361,14 +402,14 @@ export default function UsersPage() {
                       </div>
                     </TableCell>
                   </TableRow>
-                ) : users.length === 0 ? (
+                ) : filteredUsers.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                       No users found.
                     </TableCell>
                   </TableRow>
                 ) : (
-                  users.map((user) => (
+                  filteredUsers.map((user) => (
                     <TableRow key={user._id} className="hover:bg-muted/50 border-b">
                       <TableCell className="font-medium pl-4">{user.name}</TableCell>
                       <TableCell>{user.email}</TableCell>
@@ -433,12 +474,12 @@ export default function UsersPage() {
                  <div className="flex items-center justify-center py-8">
                     <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                  </div>
-              ) : users.length === 0 ? (
+              ) : filteredUsers.length === 0 ? (
                  <div className="text-center text-muted-foreground py-8">
                    No users found.
                  </div>
               ) : (
-                users.map((user) => (
+                filteredUsers.map((user) => (
                   <Card key={user._id} className="bg-white shadow-sm border">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                        <CardTitle className="text-base font-bold">
@@ -500,15 +541,7 @@ export default function UsersPage() {
           </div>
         </CardContent>
       </Card>
-
-      {/* Floating Action Button */}
-      <Button
-        onClick={() => handleOpenDialog()}
-        className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg z-50 p-0"
-      >
-        <Plus className="h-6 w-6" />
-        <span className="sr-only">Add User</span>
-      </Button>
+      </div>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-[425px]">

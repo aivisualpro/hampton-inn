@@ -21,6 +21,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${inter.variable} h-full overflow-hidden`}>
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=Audiowide&family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=Lobster&family=Quicksand:wght@300..700&display=swap" rel="stylesheet" />
+      </head>
       <body className="h-full flex flex-col bg-neutral-50 font-sans antialiased text-neutral-900 overflow-hidden" suppressHydrationWarning={true}>
         <Header />
         <main className="flex-1 overflow-auto">

@@ -52,7 +52,7 @@ export default function Home() {
       color: "text-cyan-600",
       image: "/bg_soak_cycle.png",
       value: "Active",
-      href: "/admin/soak-cycle",
+      href: "/soak-cycle",
     },
     {
       title: "Stock Purchase",
@@ -62,23 +62,16 @@ export default function Home() {
       image: "/bg_stock_purchase.png",
       value: "3 Pending",
     },
-    {
-      title: "Reports",
-      description: "View analytics",
-      icon: FileText,
-      color: "text-violet-600",
-      image: "/bg_reports.png",
-      value: "Daily",
-    },
+
   ];
 
   return (
     <div className="container mx-auto p-4 md:p-6 mt-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {modules.map((module) => {
            const CardComponent = (
              <Card
-                className="transition-all duration-200 cursor-pointer shadow-sm hover:shadow-md border-0 relative overflow-hidden h-[160px]"
+                className="group transition-all duration-300 cursor-pointer shadow-lg hover:shadow-2xl hover:-translate-y-2 border-0 relative overflow-hidden h-[220px] ring-1 ring-black/5"
                 style={{
                     backgroundImage: `url(${module.image})`,
                     backgroundSize: 'cover',
@@ -86,17 +79,17 @@ export default function Home() {
                 }}
               >
                 {/* Overlay to ensure text readability */}
-                 <div className="absolute inset-0 bg-white/70 hover:bg-white/50 transition-colors duration-200" />
+                 <div className="absolute inset-0 bg-gradient-to-br from-white/95 via-white/70 to-white/30 group-hover:from-white/90 group-hover:to-white/40 transition-all duration-300" />
                  
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 relative z-10">
-                  <CardTitle className="text-sm font-bold text-gray-900">
+                <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2 relative z-10 pt-6 px-6">
+                  <CardTitle className="text-3xl font-extrabold text-gray-900 tracking-tight leading-none" style={{ fontFamily: 'Audiowide, sans-serif' }}>
                     {module.title}
                   </CardTitle>
-                  <module.icon className={`h-5 w-5 ${module.color}`} />
+                  <module.icon className={`h-8 w-8 ${module.color} transition-transform duration-300 group-hover:scale-110`} />
                 </CardHeader>
                 <CardContent className="relative z-10">
-                  <div className={`text-2xl font-extrabold ${module.color} drop-shadow-sm`}>{module.value}</div>
-                  <p className="text-xs text-gray-800 mt-1 font-semibold">
+
+                  <p className="text-sm text-gray-600 mt-2 font-medium px-6">
                     {module.description}
                   </p>
                 </CardContent>

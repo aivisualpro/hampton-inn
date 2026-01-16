@@ -44,6 +44,9 @@ type Transaction = {
   location: string;
   countedUnit: number;
   countedPackage: number;
+  purchasedUnit: number; // Added
+  soakUnit: number;      // Added
+  consumedUnit: number;  // Added
   updatedAt: string;
 };
 
@@ -127,7 +130,9 @@ export default function ItemDetailsPage() {
   return (
     <div className="flex h-full flex-col gap-6 p-6">
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Link href="/admin" className="hover:text-primary hover:underline">Home</Link>
+        <Link href="/" className="hover:text-primary hover:underline">Home</Link>
+        <ChevronRight className="h-4 w-4" />
+        <Link href="/admin" className="hover:text-primary hover:underline">Admin</Link>
         <ChevronRight className="h-4 w-4" />
         <Link href="/admin/items" className="hover:text-primary hover:underline">Items</Link>
         <ChevronRight className="h-4 w-4" />
@@ -217,19 +222,28 @@ export default function ItemDetailsPage() {
                     <TableRow>
                       <TableHead>Date</TableHead>
                       <TableHead>Location</TableHead>
-                      <TableHead className="text-center">Counted Units</TableHead>
-                      <TableHead className="text-center">Counted Pkgs</TableHead>
+                      <TableHead className="text-center">Opening</TableHead>
+                      <TableHead className="text-center">Purchase</TableHead>
+                      <TableHead className="text-center">Soak</TableHead>
+                      <TableHead className="text-center">Cons/Disp</TableHead>
+                      <TableHead className="text-center font-bold">Closing</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {transactions.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                        <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
                           No transactions found
                         </TableCell>
                       </TableRow>
                     ) : (
-                      transactions.map((t) => (
+                      transactions.map((t) => {
+                         // Calculate Opening Balance
+                         // Closing = Opening + Purchase + Soak - Consumed
+                         // Opening = Closing - Purchase - Soak + Consumed
+                         const opening = (t.countedUnit || 0) - (t.purchasedUnit || 0) - (t.soakUnit || 0) + (t.consumedUnit || 0);
+
+                         return (
                         <TableRow key={t._id}>
                           <TableCell className="whitespace-nowrap">
                             <div className="flex items-center gap-2">
@@ -238,10 +252,13 @@ export default function ItemDetailsPage() {
                             </div>
                           </TableCell>
                           <TableCell>{locations[t.location] || "Unknown Location"}</TableCell>
-                          <TableCell className="text-center">{t.countedUnit}</TableCell>
-                          <TableCell className="text-center">{t.countedPackage}</TableCell>
+                          <TableCell className="text-center">{opening}</TableCell>
+                          <TableCell className="text-center">{t.purchasedUnit || 0}</TableCell>
+                          <TableCell className="text-center">{t.soakUnit || 0}</TableCell>
+                          <TableCell className="text-center">{t.consumedUnit || 0}</TableCell>
+                          <TableCell className="text-center font-bold">{t.countedUnit}</TableCell>
                         </TableRow>
-                      ))
+                      )})
                     )}
                   </TableBody>
                 </Table>

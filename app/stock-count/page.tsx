@@ -63,6 +63,7 @@ type User = {
   name: string;
   email: string;
   locations: string[];
+  lastSelectedLocation?: string;
 };
 
 function StockCountContent() {
@@ -187,18 +188,47 @@ function StockCountContent() {
       ]);
       
       // Filter locations based on user's assigned locations
+      let filteredLocations = locations;
       if (user && user.locations && user.locations.length > 0) {
-        const filtered = locations.filter((loc: Location) => 
+        filteredLocations = locations.filter((loc: Location) => 
           user.locations.some((userLocIdOrName: string) => 
             String(userLocIdOrName) === String(loc._id) || 
             String(userLocIdOrName) === loc.name
           )
         );
-        setUserLocations(filtered);
-      } else {
-        // If no user or no specific locations assigned, show all (for admin)
-        setUserLocations(locations);
       }
+      setUserLocations(filteredLocations);
+
+       // Set initial location:
+       // 1. URL Parameter
+       // 2. User's Last Selected Location (if in allowed list)
+       // 3. First available location
+       const urlLocationId = searchParams.get("location");
+       let initialLocation: Location | undefined;
+
+       if (urlLocationId) {
+          initialLocation = filteredLocations.find((l: Location) => l._id === urlLocationId);
+       } 
+       
+       if (!initialLocation && user?.lastSelectedLocation) {
+          initialLocation = filteredLocations.find((l: Location) => l._id === user.lastSelectedLocation);
+          // If we fell back to saved preference, update the URL to match
+          if (initialLocation) {
+             // We can't use updateUrl here directly because we are inside useEffect
+             // But we can let the state update trigger a re-render or side effect if needed
+             // For now, let's just set the state. Ideally, we sync URL too.
+          }
+       }
+
+       if (initialLocation) {
+         setSelectedLocation(initialLocation);
+          // Sync URL if it was empty but we found a default
+          if (!urlLocationId) {
+             const params = new URLSearchParams(window.location.search);
+             params.set("location", initialLocation._id);
+             router.replace(`${pathname}?${params.toString()}`);
+          }
+       }
       
       setLoading(false);
     };
@@ -212,9 +242,21 @@ function StockCountContent() {
     setEditedValues({});
   }, [fetchTransactions]);
 
-  const handleSelectLocation = (location: Location) => {
+  const handleSelectLocation = async (location: Location) => {
     setSelectedLocation(location);
     setIsLocationSelectorOpen(false);
+    updateUrl("location", location._id);
+
+    // Persist to user profile
+    try {
+        await fetch("/api/auth/me", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ lastSelectedLocation: location._id })
+        });
+    } catch(e) {
+        console.error("Failed to save location preference", e);
+    }
   };
 
   // Enable edit mode and initialize edited values

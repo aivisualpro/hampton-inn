@@ -8,6 +8,7 @@ export interface IUser extends Document {
   phone: string;
   role: string;
   locations: string[];
+  lastSelectedLocation?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -20,6 +21,7 @@ const UserSchema: Schema = new Schema(
     phone: { type: String, required: false },
     role: { type: String, required: true, default: "Staff" },
     locations: { type: [String], default: [] },
+    lastSelectedLocation: { type: String, required: false },
   },
   {
     timestamps: true,

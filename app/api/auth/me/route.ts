@@ -48,3 +48,61 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Authentication failed" }, { status: 401 });
   }
 }
+
+
+export async function PUT(request: NextRequest) {
+  try {
+    const token = request.cookies.get("token")?.value;
+
+    if (!token) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+
+    const secret = new TextEncoder().encode(
+      process.env.JWT_SECRET || "default_secret_key_change_me"
+    );
+
+    const { payload } = await jwtVerify(token, secret);
+    
+    // Extract User ID logic (reuse or simplify for now)
+    let userId: string;
+     if (typeof payload.userId === "string") {
+      userId = payload.userId;
+    } else if (payload.userId && typeof payload.userId === "object") {
+       const obj = payload.userId as any;
+       if (obj.buffer) {
+         const bytes = Object.values(obj.buffer) as number[];
+         userId = bytes.map((b: number) => b.toString(16).padStart(2, "0")).join("");
+       } else {
+         return NextResponse.json({ error: "Invalid token format" }, { status: 401 });
+       }
+    } else {
+       return NextResponse.json({ error: "Invalid token" }, { status: 401 });
+    }
+
+    await connectToDatabase();
+    
+    const body = await request.json();
+    const { lastSelectedLocation } = body;
+
+    // Only allow updating specific fields for now
+    const updateData: any = {};
+    if (lastSelectedLocation !== undefined) updateData.lastSelectedLocation = lastSelectedLocation;
+
+    const user = await User.findByIdAndUpdate(
+        userId, 
+        { $set: updateData },
+        { new: true }
+    ).select("-password");
+
+     if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
+
+    return NextResponse.json(user);
+
+  } catch (error) {
+    console.error("Error updating user:", error);
+    return NextResponse.json({ error: "Update failed" }, { status: 500 });
+  }
+}

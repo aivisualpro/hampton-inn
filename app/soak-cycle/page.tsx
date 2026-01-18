@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { Loader2, Calendar, Save, ChevronRight, ChevronLeft, Search, Edit2, X } from "lucide-react";
@@ -38,7 +38,7 @@ const calculateTotal = (item: SoakCycleItem) => {
     return (item.previousBalance || 0) + (item.soakUnit || 0) - (item.disposedUnit || 0);
 };
 
-export default function SoakCyclePage() {
+function SoakCycleContent() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -457,5 +457,17 @@ export default function SoakCyclePage() {
             )}
       </div>
     </div>
+  );
+}
+
+export default function SoakCyclePage() {
+  return (
+    <Suspense fallback={
+       <div className="flex h-full w-full items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+       </div>
+    }>
+      <SoakCycleContent />
+    </Suspense>
   );
 }

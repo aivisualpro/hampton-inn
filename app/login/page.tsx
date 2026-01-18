@@ -50,7 +50,7 @@ export default function LoginPage() {
           <div className="relative h-12 w-12 mb-2">
             <Image src="/logo.png" alt="Logo" fill className="object-contain" />
           </div>
-          <CardTitle className="text-xl">Hamton Inn</CardTitle>
+          <CardTitle className="text-xl">Hampton Inn</CardTitle>
           <CardDescription>Enter your email below to login</CardDescription>
         </CardHeader>
         <CardContent>

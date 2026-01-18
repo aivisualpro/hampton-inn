@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import Link from "next/link";
-import { Loader2, MapPin, ChevronDown, Calendar, Pencil, Save, ChevronRight } from "lucide-react";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import { Loader2, MapPin, ChevronDown, Calendar, Pencil, Save, ChevronRight, Search, ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -64,7 +65,7 @@ type User = {
   locations: string[];
 };
 
-export default function StockCountPage() {
+function StockCountContent() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [allLocations, setAllLocations] = useState<Location[]>([]);
   const [userLocations, setUserLocations] = useState<Location[]>([]);
@@ -74,11 +75,42 @@ export default function StockCountPage() {
   const [saving, setSaving] = useState(false);
   const [isLocationSelectorOpen, setIsLocationSelectorOpen] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
-  const [selectedDate, setSelectedDate] = useState<string>(
-    new Date().toISOString().split("T")[0]
-  );
   const [isEditMode, setIsEditMode] = useState(false);
   const [editedValues, setEditedValues] = useState<EditedValues>({});
+
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const getDateFromUrl = () => {
+    const paramDate = searchParams.get("date");
+    if (paramDate) return paramDate;
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const selectedDate = getDateFromUrl();
+  const searchQuery = searchParams.get("q") || "";
+
+  const updateUrl = (key: string, value: string | null) => {
+      const params = new URLSearchParams(searchParams);
+      if (value) {
+          params.set(key, value);
+      } else {
+          params.delete(key);
+      }
+      router.replace(`${pathname}?${params.toString()}`);
+  };
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
 
   // Fetch current user
   const fetchCurrentUser = async () => {
@@ -269,6 +301,16 @@ export default function StockCountPage() {
     })
     .filter(Boolean) as ItemWithCount[]) || [];
 
+  const filteredItems = locationItems.filter((item) => 
+    item.item.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
+  const paginatedItems = filteredItems.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+
   // Get display value (edited value if in edit mode, otherwise transaction value)
   const getDisplayValue = (itemId: string, field: "countedUnit" | "countedPackage") => {
     if (isEditMode && editedValues[itemId]) {
@@ -284,7 +326,7 @@ export default function StockCountPage() {
       <div className="border-b bg-white px-4 py-3 flex flex-wrap gap-3 items-center">
         {/* Breadcrumbs */}
         <div className="flex items-center gap-2 text-sm text-muted-foreground mr-4">
-          <Link href="/admin" className="hover:text-primary hover:underline">Home</Link>
+          <Link href="/" className="hover:text-primary hover:underline">Home</Link>
           <ChevronRight className="h-4 w-4" />
           <span className="font-medium text-foreground">Stock Count</span>
         </div>
@@ -305,13 +347,25 @@ export default function StockCountPage() {
           <ChevronDown className="h-4 w-4 text-muted-foreground" />
         </Button>
 
+         {/* Search Bar */}
+         <div className="relative max-w-sm w-full md:w-64">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder="Search items..."
+                className="w-full bg-background pl-8 h-8 text-sm"
+                value={searchQuery}
+                onChange={(e) => updateUrl("q", e.target.value)}
+              />
+        </div>
+
         {/* Date Picker */}
         <div className="flex items-center gap-2">
           <Calendar className="h-4 w-4 text-muted-foreground" />
           <Input
             type="date"
             value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
+            onChange={(e) => updateUrl("date", e.target.value)}
             className="w-auto"
             disabled={isEditMode}
           />
@@ -379,7 +433,7 @@ export default function StockCountPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {locationItems.map((item) => (
+              {paginatedItems.map((item) => (
                 <TableRow key={item._id}>
                   <TableCell className="font-medium pl-4">{item.item}</TableCell>
                   <TableCell className="text-center">
@@ -414,6 +468,37 @@ export default function StockCountPage() {
           </Table>
         )}
       </div>
+      
+      {/* Pagination Controls */}
+      {!loading && filteredItems.length > 0 && (
+              <div className="flex-none flex items-center justify-end space-x-2 p-2 border-t bg-white z-20">
+                <div className="flex-1 text-sm text-muted-foreground">
+                  Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredItems.length)} of {filteredItems.length} entries
+                </div>
+                <div className="space-x-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="h-8"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                    disabled={currentPage === totalPages}
+                    className="h-8"
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            )}
 
       {/* Location Selector Dialog */}
       <Dialog open={isLocationSelectorOpen} onOpenChange={setIsLocationSelectorOpen}>

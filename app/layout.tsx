@@ -6,8 +6,8 @@ import { Header } from "@/components/layout/header";
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: "Hamton Inn",
-  description: "Next.js Application for Hamton Inn",
+  title: "Hampton Inn",
+  description: "Next.js Application for Hampton Inn",
   icons: {
     icon: "/logo.png",
     apple: "/logo.png",

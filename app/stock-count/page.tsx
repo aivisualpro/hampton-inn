@@ -108,6 +108,20 @@ function StockCountContent() {
       router.replace(`${pathname}?${params.toString()}`);
   };
 
+  const handlePrevDay = () => {
+    const currentDate = new Date(selectedDate);
+    currentDate.setDate(currentDate.getDate() - 1);
+    const newDateStr = currentDate.toISOString().split('T')[0];
+    updateUrl("date", newDateStr);
+  };
+
+  const handleNextDay = () => {
+    const currentDate = new Date(selectedDate);
+    currentDate.setDate(currentDate.getDate() + 1);
+    const newDateStr = currentDate.toISOString().split('T')[0];
+    updateUrl("date", newDateStr);
+  };
+
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
 
@@ -450,14 +464,22 @@ function StockCountContent() {
 
         {/* Date Picker */}
         <div className="flex items-center gap-2">
-          <Calendar className="h-4 w-4 text-muted-foreground" />
-          <Input
-            type="date"
-            value={selectedDate}
-            onChange={(e) => updateUrl("date", e.target.value)}
-            className="w-auto"
-            disabled={isEditMode}
-          />
+            <Button variant="outline" size="icon" className="h-8 w-8" onClick={handlePrevDay} disabled={isEditMode}>
+                <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <div className="relative">
+                <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                <Input
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => updateUrl("date", e.target.value)}
+                    className="w-auto pl-9 h-8"
+                    disabled={isEditMode}
+                />
+            </div>
+            <Button variant="outline" size="icon" className="h-8 w-8" onClick={handleNextDay} disabled={isEditMode}>
+                <ChevronRight className="h-4 w-4" />
+            </Button>
         </div>
 
         {/* Spacer */}
@@ -521,6 +543,8 @@ function StockCountContent() {
                 <TableHead className="font-semibold text-center w-[150px] bg-gray-50/50">Opening Balance (Package)</TableHead>
                 <TableHead className="font-semibold text-center w-[150px] bg-blue-50/50">Count Unit</TableHead>
                 <TableHead className="font-semibold text-center w-[150px] bg-blue-50/50">Count Package</TableHead>
+                <TableHead className="font-semibold text-center w-[150px] bg-green-50/50">Closing Balance (Unit)</TableHead>
+                <TableHead className="font-semibold text-center w-[150px] bg-green-50/50">Closing Balance (Package)</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -558,6 +582,14 @@ function StockCountContent() {
                     ) : (
                       <span>{item.countedPackage}</span>
                     )}
+                  </TableCell>
+                  <TableCell className="text-center font-medium text-gray-700 bg-green-50/20">
+                      {/* Closing Balance mirrors Counted Value */}
+                      {getDisplayValue(item._id, "countedUnit")}
+                  </TableCell>
+                  <TableCell className="text-center font-medium text-gray-700 bg-green-50/20">
+                      {/* Closing Balance mirrors Counted Value */}
+                      {getDisplayValue(item._id, "countedPackage")}
                   </TableCell>
                 </TableRow>
               ))}

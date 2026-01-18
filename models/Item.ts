@@ -44,6 +44,11 @@ const ItemSchema: Schema = new Schema(
 );
 
 // Check if model already exists to prevent overwrite error in hot reload
+// In development, delete the model if it exists to ensure schema changes are picked up
+if (process.env.NODE_ENV === "development" && mongoose.models.Item) {
+  delete mongoose.models.Item;
+}
+
 const Item: Model<IItem> =
   mongoose.models.Item || mongoose.model<IItem>("Item", ItemSchema);
 

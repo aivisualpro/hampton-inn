@@ -58,7 +58,6 @@ type Item = {
   item: string;
   category: string;
   subCategory: string;
-  subCategory: string;
   isDailyCount?: boolean;
   cookingQty?: string;
   costPerPackage: number;
@@ -597,8 +596,6 @@ function ItemsContent() {
                       <Pencil className="mr-2 h-4 w-4" />
                       Quick Edit
                     </Button>
-                      Quick Edit
-                    </Button>
                   )}
                   <Button size="sm" onClick={() => handleOpenDialog()} className="h-9">
                     <Plus className="mr-2 h-4 w-4" />
@@ -659,30 +656,17 @@ function ItemsContent() {
                           >
                             <TableCell className="font-medium pl-4 py-1">
                               {isQuickEditMode ? (
-                                <div className="flex flex-col gap-1">
-                                  <Input 
-                                    value={editedItems[item._id]?.item ?? item.item} 
-                                    onChange={(e) => handleQuickEditChange(item._id, "item", e.target.value)}
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="h-7 w-full text-xs"
-                                  />
-                                  <Input 
-                                    value={editedItems[item._id]?.subCategory ?? item.subCategory ?? ""} 
-                                    onChange={(e) => handleQuickEditChange(item._id, "subCategory", e.target.value)}
-                                    onClick={(e) => e.stopPropagation()}
-                                    className="h-6 text-[10px] w-full"
-                                    placeholder="Sub Category"
-                                  />
-                                </div>
+                                <Input 
+                                  value={editedItems[item._id]?.item ?? item.item} 
+                                  onChange={(e) => handleQuickEditChange(item._id, "item", e.target.value)}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="h-7 w-full text-xs"
+                                />
                               ) : (
-                                <>
-                                  <div className="font-medium hover:underline text-primary flex items-center gap-2">
-                                    {item.isBundle && <Layers className="h-3 w-3 text-amber-500" />}
-                                    {item.item}
-                                  </div>
-                                  {item.subCategory && <div className="text-xs text-muted-foreground">{item.subCategory}</div>}
-                                  </div>
-                                </>
+                                <div className="font-medium hover:underline text-primary flex items-center gap-2">
+                                  {item.isBundle && <Layers className="h-3 w-3 text-amber-500" />}
+                                  {item.item}
+                                </div>
                               )}
                             </TableCell>
                             <TableCell className="py-1">
@@ -1144,7 +1128,6 @@ function ItemsContent() {
                      ))}
                    </div>
                  )}
-              </div>
               </div>
             )}
 

@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useEffect, useState, useCallback, Suspense } from "react";
+import { useEffect, useState, useCallback, Suspense, Fragment } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { Loader2, Calendar, Pencil, Save, ChevronRight, ChevronLeft, Search } from "lucide-react";
@@ -26,6 +26,7 @@ import {
 type Item = {
   _id: string;
   item: string;
+  subCategory?: string;
   package?: string;
   cookingQty?: string;
   isDailyCount?: boolean;
@@ -312,7 +313,15 @@ function DailyOccupancyContent() {
        }
    };
 
-   const filteredItems = allItems.filter(i => i.item.toLowerCase().includes(searchQuery.toLowerCase()));
+   const filteredItems = allItems
+        .filter(i => i.item.toLowerCase().includes(searchQuery.toLowerCase()))
+        .sort((a, b) => {
+            const subCatA = a.subCategory || "";
+            const subCatB = b.subCategory || "";
+            if (subCatA < subCatB) return -1;
+            if (subCatA > subCatB) return 1;
+            return a.item.localeCompare(b.item);
+        });
    // Pagination
    const paginatedItems = filteredItems.slice((currentPage-1)*itemsPerPage, currentPage*itemsPerPage);
    const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
@@ -426,38 +435,52 @@ function DailyOccupancyContent() {
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {paginatedItems.map(item => {
+                    {paginatedItems.map((item, index) => {
                          const opening = item.openingBalanceUnit;
                          const purchase = getDisplayVal(item._id, "purchasedUnit");
                          const consumed = getDisplayVal(item._id, "consumedUnit");
                          const closing = opening + purchase - consumed;
+                         
+                         // Determine if we need a group header
+                         const prevItem = index > 0 ? paginatedItems[index - 1] : null;
+                         const showHeader = !prevItem || item.subCategory !== prevItem.subCategory;
+                         const subCategoryLabel = item.subCategory || "Other";
 
                         return (
-                            <TableRow key={item._id}>
-                                <TableCell className="font-medium">{item.item}</TableCell>
-                                <TableCell>{item.package || "-"}</TableCell>
-                                <TableCell>{item.cookingQty || "-"}</TableCell>
-                                <TableCell className="text-center">{opening}</TableCell>
-                                <TableCell className="text-center bg-blue-50/20">
-                                    {isEditMode ? (
-                                        <Input type="number" min="0" value={purchase} 
-                                           onChange={(e) => handleValueChange(item._id, "purchasedUnit", parseInt(e.target.value)||0)}
-                                           className="w-20 mx-auto text-center h-8 border-blue-200"
-                                        />
-                                    ) : purchase}
-                                </TableCell>
-                                <TableCell className="text-center bg-blue-50/20">
-                                     {isEditMode ? (
-                                        <Input type="number" min="0" value={consumed} 
-                                           onChange={(e) => handleValueChange(item._id, "consumedUnit", parseInt(e.target.value)||0)}
-                                           className="w-20 mx-auto text-center h-8 border-blue-200"
-                                        />
-                                    ) : consumed}
-                                </TableCell>
-                                <TableCell className="text-center font-bold text-gray-700 bg-green-50/20">
-                                    {closing}
-                                </TableCell>
-                            </TableRow>
+                            <Fragment key={item._id}>
+                                {showHeader && (
+                                    <TableRow className="bg-muted/50 hover:bg-muted/50">
+                                        <TableCell colSpan={7} className="font-semibold text-primary py-2">
+                                            {subCategoryLabel}
+                                        </TableCell>
+                                    </TableRow>
+                                )}
+                                <TableRow>
+                                    <TableCell className="font-medium pl-8">{item.item}</TableCell>
+                                    <TableCell>{item.package || "-"}</TableCell>
+                                    <TableCell>{item.cookingQty || "-"}</TableCell>
+                                    <TableCell className="text-center">{opening}</TableCell>
+                                    <TableCell className="text-center bg-blue-50/20">
+                                        {isEditMode ? (
+                                            <Input type="number" min="0" value={purchase} 
+                                               onChange={(e) => handleValueChange(item._id, "purchasedUnit", parseInt(e.target.value)||0)}
+                                               className="w-20 mx-auto text-center h-8 border-blue-200"
+                                            />
+                                        ) : purchase}
+                                    </TableCell>
+                                    <TableCell className="text-center bg-blue-50/20">
+                                         {isEditMode ? (
+                                            <Input type="number" min="0" value={consumed} 
+                                               onChange={(e) => handleValueChange(item._id, "consumedUnit", parseInt(e.target.value)||0)}
+                                               className="w-20 mx-auto text-center h-8 border-blue-200"
+                                            />
+                                        ) : consumed}
+                                    </TableCell>
+                                    <TableCell className="text-center font-bold text-gray-700 bg-green-50/20">
+                                        {closing}
+                                    </TableCell>
+                                </TableRow>
+                            </Fragment>
                         );
                     })}
                 </TableBody>

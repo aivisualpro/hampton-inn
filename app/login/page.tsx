@@ -48,7 +48,7 @@ export default function LoginPage() {
       <Card className="w-full max-w-sm shadow-md">
         <CardHeader className="flex flex-col items-center space-y-2 text-center">
           <div className="relative h-12 w-12 mb-2">
-            <Image src="/logo.png" alt="Logo" fill className="object-contain" />
+            <Image src="/logo.png" alt="Logo" fill sizes="48px" className="object-contain" />
           </div>
           <CardTitle className="text-xl">Hampton Inn</CardTitle>
           <CardDescription>Enter your email below to login</CardDescription>

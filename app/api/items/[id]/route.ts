@@ -31,6 +31,7 @@ export async function PUT(
     const { id } = await params;
     await connectToDatabase();
     const body = await request.json();
+    console.log("Updating Item Payload:", body);
 
     // Ensure numeric fields are actually numbers if passed as strings
     const numericFields = ['costPerPackage', 'restockPackageQty', 'defaultKingRoomQty', 'defaultDoubleQueenQty'];

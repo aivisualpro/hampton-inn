@@ -110,7 +110,7 @@ export function Header() {
         <div className="w-[40%] md:w-[20%] flex items-center">
             <Link href="/" className="flex items-center space-x-2">
               <div className="relative h-[3vh] w-[3vh] min-h-[24px] min-w-[24px]">
-                 <Image src="/logo.png" alt="Hampton Inn Logo" fill className="object-contain" />
+                 <Image src="/logo.png" alt="Hampton Inn Logo" fill sizes="30px" className="object-contain" />
               </div>
               <span className="text-[2vh] md:text-lg font-bold tracking-tight text-foreground/90 whitespace-nowrap">
                 Hampton Inn

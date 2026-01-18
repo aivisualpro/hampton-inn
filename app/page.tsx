@@ -13,6 +13,7 @@ import {
   FileText,
   Shield,
   LucideIcon,
+  Hotel,
 } from "lucide-react";
 
 type Module = {
@@ -61,6 +62,14 @@ export default function Home() {
       color: "text-emerald-600",
       image: "/bg_stock_purchase.png",
       value: "3 Pending",
+    },
+    {
+      title: "Daily Occupancy",
+      description: "Track daily room occupancy",
+      icon: Hotel,
+      color: "text-purple-600",
+      image: "/bg_daily_occupancy.png",
+      value: "View",
     },
 
   ];

@@ -96,6 +96,13 @@ function StockCountContent() {
   };
 
   const selectedDate = getDateFromUrl();
+  const [dateInputValue, setDateInputValue] = useState(selectedDate);
+
+  // Sync local state when URL date changes (e.g. via Next/Prev buttons)
+  useEffect(() => {
+    setDateInputValue(selectedDate);
+  }, [selectedDate]);
+
   const searchQuery = searchParams.get("q") || "";
 
   const updateUrl = (key: string, value: string | null) => {
@@ -106,6 +113,15 @@ function StockCountContent() {
           params.delete(key);
       }
       router.replace(`${pathname}?${params.toString()}`);
+  };
+
+  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newDate = e.target.value;
+    setDateInputValue(newDate);
+    // Only update URL if it's a valid date string (standard date input returns YYYY-MM-DD or empty)
+    if (newDate) {
+        updateUrl("date", newDate);
+    }
   };
 
   const handlePrevDay = () => {
@@ -471,8 +487,8 @@ function StockCountContent() {
                 <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
                 <Input
                     type="date"
-                    value={selectedDate}
-                    onChange={(e) => updateUrl("date", e.target.value)}
+                    value={dateInputValue} // Use local state
+                    onChange={handleDateChange}
                     className="w-auto pl-9 h-8"
                     disabled={isEditMode}
                 />

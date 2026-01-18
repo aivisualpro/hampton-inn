@@ -47,6 +47,8 @@ type Transaction = {
 };
 
 type ItemWithCount = Item & {
+  openingBalanceUnit: number;
+  openingBalancePackage: number;
   countedUnit: number;
   countedPackage: number;
 };
@@ -156,26 +158,16 @@ function StockCountContent() {
     }
   };
 
-  // Fetch transactions for the selected date and location
+  // Fetch transactions and opening balances for the selected date and location
   const fetchTransactions = useCallback(async () => {
     if (!selectedLocation || !selectedDate) {
       setTransactions([]);
       return;
     }
     
-    try {
-      const params = new URLSearchParams({
-        date: selectedDate,
-        location: selectedLocation._id,
-      });
-      const response = await fetch(`/api/transactions?${params}`);
-      if (response.ok) {
-        const data = await response.json();
-        setTransactions(data);
-      }
-    } catch (error) {
-      console.error("Error fetching transactions:", error);
-    }
+    // We will handle data merging in effect, here we just trigger/set state if needed or let useEffect handle it
+    // But to keep consistency with previous pattern, we might want to fetch here and set state
+    // converting this to a data loader function called by useEffect seems cleaner as done in soak-cycle
   }, [selectedLocation, selectedDate]);
 
   useEffect(() => {
@@ -235,12 +227,51 @@ function StockCountContent() {
     loadData();
   }, []);
 
+  // Load Transactions and Opening Balances when location or date changes
   useEffect(() => {
-    fetchTransactions();
-    // Reset edit mode when location or date changes
-    setIsEditMode(false);
-    setEditedValues({});
-  }, [fetchTransactions]);
+    if (selectedLocation && selectedDate) {
+        const loadValues = async () => {
+            try {
+             setLoading(true);
+             const params = new URLSearchParams({
+                date: selectedDate,
+                location: selectedLocation._id,
+              });
+              
+              // Parallel fetch: Previous Balances + Current Transactions
+              const [openingRes, currentRes] = await Promise.all([
+                  fetch(`/api/stock/opening-balance?${params}`),
+                  fetch(`/api/transactions?${params}`)
+              ]);
+ 
+              // We need to parse opening balances to a map for easy lookup
+              const openingData = await openingRes.json();
+              const currentData = await currentRes.json();
+              
+              // Store transactions directly if needed, or just use them to build item state
+              setTransactions(currentData); 
+
+              // Store opening balances separately? Or better, we need them when rendering items.
+              // For now let's store them in a state to merge later
+              setOpeningBalancesMap(
+                 Array.isArray(openingData) ? 
+                 openingData.reduce((acc: any, curr: any) => ({...acc, [curr.item]: curr}), {}) 
+                 : {}
+              );
+
+            } catch(e) { 
+                console.error(e); 
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadValues();
+        setIsEditMode(false);
+        setEditedValues({});
+    }
+  }, [selectedDate, selectedLocation]);
+
+  const [openingBalancesMap, setOpeningBalancesMap] = useState<any>({});
 
   const handleSelectLocation = async (location: Location) => {
     setSelectedLocation(location);
@@ -296,6 +327,16 @@ function StockCountContent() {
     try {
       // Save each edited item as a transaction
       const savePromises = Object.entries(editedValues).map(([itemId, values]) => {
+        // Calculate consumed values
+        // Consumed = Opening Balance - Count
+        // We need lookup for opening balance
+        const itemOpening = openingBalancesMap[itemId];
+        const openingUnit = itemOpening?.openingBalance || 0;
+        const openingPackage = itemOpening?.openingBalancePackage || 0;
+
+        const consumedUnit = openingUnit - values.countedUnit;
+        const consumedPackage = openingPackage - values.countedPackage;
+
         return fetch("/api/transactions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -305,6 +346,8 @@ function StockCountContent() {
             location: selectedLocation._id,
             countedUnit: values.countedUnit,
             countedPackage: values.countedPackage,
+            consumedUnit: consumedUnit,
+            consumedPackage: consumedPackage,
           }),
         });
       });
@@ -335,8 +378,12 @@ function StockCountContent() {
       if (!item) return null;
       
       const transaction = transactions.find(t => t.item === itemId);
+      const openingRecord = openingBalancesMap[itemId];
+
       return {
         ...item,
+        openingBalanceUnit: openingRecord?.openingBalance || 0,
+        openingBalancePackage: openingRecord?.openingBalancePackage || 0,
         countedUnit: transaction?.countedUnit || 0,
         countedPackage: transaction?.countedPackage || 0,
       };
@@ -470,35 +517,43 @@ function StockCountContent() {
             <TableHeader className="bg-muted/50 sticky top-0">
               <TableRow>
                 <TableHead className="font-semibold pl-4">Item</TableHead>
-                <TableHead className="font-semibold text-center w-[150px]">Available Unit</TableHead>
-                <TableHead className="font-semibold text-center w-[150px]">Available Package</TableHead>
+                <TableHead className="font-semibold text-center w-[150px] bg-gray-50/50">Opening Balance (Unit)</TableHead>
+                <TableHead className="font-semibold text-center w-[150px] bg-gray-50/50">Opening Balance (Package)</TableHead>
+                <TableHead className="font-semibold text-center w-[150px] bg-blue-50/50">Count Unit</TableHead>
+                <TableHead className="font-semibold text-center w-[150px] bg-blue-50/50">Count Package</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {paginatedItems.map((item) => (
                 <TableRow key={item._id}>
                   <TableCell className="font-medium pl-4">{item.item}</TableCell>
-                  <TableCell className="text-center">
+                  <TableCell className="text-center font-medium text-gray-600 bg-gray-50/30">
+                      {item.openingBalanceUnit}
+                  </TableCell>
+                  <TableCell className="text-center font-medium text-gray-600 bg-gray-50/30">
+                      {item.openingBalancePackage}
+                  </TableCell>
+                  <TableCell className="text-center bg-blue-50/20">
                     {isEditMode ? (
                       <Input
                         type="number"
                         min="0"
                         value={getDisplayValue(item._id, "countedUnit")}
                         onChange={(e) => handleValueChange(item._id, "countedUnit", parseInt(e.target.value) || 0)}
-                        className="w-20 mx-auto text-center h-8"
+                        className="w-20 mx-auto text-center h-8 border-blue-200 focus-visible:ring-blue-400"
                       />
                     ) : (
                       <span>{item.countedUnit}</span>
                     )}
                   </TableCell>
-                  <TableCell className="text-center">
+                  <TableCell className="text-center bg-blue-50/20">
                     {isEditMode ? (
                       <Input
                         type="number"
                         min="0"
                         value={getDisplayValue(item._id, "countedPackage")}
                         onChange={(e) => handleValueChange(item._id, "countedPackage", parseInt(e.target.value) || 0)}
-                        className="w-20 mx-auto text-center h-8"
+                        className="w-20 mx-auto text-center h-8 border-blue-200 focus-visible:ring-blue-400"
                       />
                     ) : (
                       <span>{item.countedPackage}</span>

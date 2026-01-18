@@ -43,6 +43,7 @@ export async function GET(request: NextRequest) {
         $group: {
           _id: "$item", // Group by Item ID
           lastCountedUnit: { $first: "$countedUnit" },
+          lastCountedPackage: { $first: "$countedPackage" },
         }
       },
       
@@ -51,6 +52,7 @@ export async function GET(request: NextRequest) {
         $project: {
           item: "$_id",
           openingBalance: "$lastCountedUnit",
+          openingBalancePackage: "$lastCountedPackage",
           _id: 0
         }
       }

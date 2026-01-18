@@ -179,6 +179,7 @@ export default function LocationsPage() {
   const [editingLocation, setEditingLocation] = useState<Location | null>(null);
   const [viewingLocation, setViewingLocation] = useState<Location | null>(null);
   const [viewingItemsLocation, setViewingItemsLocation] = useState<Location | null>(null);
+  const [currentTransactions, setCurrentTransactions] = useState<any[]>([]);
 
   // Pagination & Search State
   const [searchQuery, setSearchQuery] = useState("");
@@ -245,6 +246,28 @@ export default function LocationsPage() {
     fetchLocations();
     fetchItems();
   }, []);
+
+  // Fetch transactions when viewing items for a location
+  useEffect(() => {
+    if (viewingItemsLocation) {
+      const fetchData = async () => {
+        try {
+          const response = await fetch(
+            `/api/stock/current?location=${viewingItemsLocation._id}`
+          );
+          if (response.ok) {
+            const data = await response.json();
+            setCurrentTransactions(data);
+          }
+        } catch (error) {
+          console.error("Error fetching transactions:", error);
+        }
+      };
+      fetchData();
+    } else {
+      setCurrentTransactions([]);
+    }
+  }, [viewingItemsLocation]);
 
   const handleOpenDialog = (location?: Location) => {
     if (location) {
@@ -739,11 +762,12 @@ export default function LocationsPage() {
                     <TableBody>
                       {viewingItemsLocation.items.map((itemId) => {
                         const item = allItems.find(i => i._id === itemId);
+                        const stockInfo = currentTransactions.find(t => t.item === itemId);
                         return item ? (
                           <TableRow key={itemId}>
                             <TableCell className="font-medium">{item.item}</TableCell>
-                            <TableCell className="text-center">0</TableCell>
-                            <TableCell className="text-center">{item.restockPackageQty}</TableCell>
+                            <TableCell className="text-center">{stockInfo?.totalUnit || 0}</TableCell>
+                            <TableCell className="text-center">{stockInfo?.totalPackage || 0}</TableCell>
                             <TableCell className="text-center">
                               <Button
                                 variant="ghost"

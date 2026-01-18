@@ -10,7 +10,7 @@ export async function GET(
   try {
     const { id } = await params;
     await connectToDatabase();
-    const item = await Item.findById(id);
+    const item = await Item.findById(id).populate("bundleItems.item");
 
     if (!item) {
       return NextResponse.json({ error: "Item not found" }, { status: 404 });

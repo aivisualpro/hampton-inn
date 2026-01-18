@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Loader2, Calendar, ChevronRight } from "lucide-react";
+import { ArrowLeft, Loader2, Calendar, ChevronRight, Pencil, Layers } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -28,6 +28,8 @@ type Item = {
   restockPackageQty: number;
   defaultKingRoomQty: number;
   defaultDoubleQueenQty: number;
+  isBundle?: boolean;
+  bundleItems?: { item: { item: string }; quantity: number }[];
 };
 
 type StockBreakdown = {
@@ -129,14 +131,24 @@ export default function ItemDetailsPage() {
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <Link href="/" className="hover:text-primary hover:underline">Home</Link>
-        <ChevronRight className="h-4 w-4" />
-        <Link href="/admin" className="hover:text-primary hover:underline">Admin</Link>
-        <ChevronRight className="h-4 w-4" />
-        <Link href="/admin/items" className="hover:text-primary hover:underline">Items</Link>
-        <ChevronRight className="h-4 w-4" />
-        <span className="font-medium text-foreground line-clamp-1">{item.item}</span>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Link href="/" className="hover:text-primary hover:underline">Home</Link>
+          <ChevronRight className="h-4 w-4" />
+          <Link href="/admin" className="hover:text-primary hover:underline">Admin</Link>
+          <ChevronRight className="h-4 w-4" />
+          <Link href="/admin/items" className="hover:text-primary hover:underline">Items</Link>
+          <ChevronRight className="h-4 w-4" />
+          <span className="font-medium text-foreground line-clamp-1">{item.item}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => router.back()}>
+            <ArrowLeft className="mr-2 h-4 w-4" /> Back
+          </Button>
+          <Button size="sm" onClick={() => router.push(`/admin/items?editId=${item._id}`)}>
+            <Pencil className="mr-2 h-4 w-4" /> Edit
+          </Button>
+        </div>
       </div>
 
 
@@ -147,7 +159,13 @@ export default function ItemDetailsPage() {
           {/* Item Details Card */}
           <Card>
             <CardHeader>
-              <CardTitle>Details</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Details</CardTitle>
+                <div className="flex gap-2">
+                  <Badge variant="secondary" className="font-normal">{item.category}</Badge>
+                  {item.subCategory && <Badge variant="outline" className="font-normal">{item.subCategory}</Badge>}
+                </div>
+              </div>
             </CardHeader>
             <CardContent className="grid gap-4">
               <div className="flex flex-col gap-4 text-sm">
@@ -175,6 +193,24 @@ export default function ItemDetailsPage() {
                   <span className="text-muted-foreground">Default Dbl Queen Qty</span>
                   <span className="font-medium">{item.defaultDoubleQueenQty}</span>
                 </div>
+                {item.isBundle && item.bundleItems && item.bundleItems.length > 0 && (
+                  <>
+                    <Separator />
+                    <div className="flex flex-col gap-3 pt-2">
+                      <div className="text-sm font-medium flex items-center gap-2 text-amber-700">
+                        <Layers className="h-4 w-4" /> Bundle Contents:
+                      </div>
+                      <div className="grid gap-2">
+                        {item.bundleItems.map((bi, i) => (
+                           <div key={i} className="flex justify-between items-center text-sm bg-muted/40 p-2 rounded-md border">
+                             <span className="text-foreground">{bi.item.item}</span>
+                             <Badge variant="outline" className="bg-white">x{bi.quantity}</Badge>
+                           </div>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </CardContent>
           </Card>

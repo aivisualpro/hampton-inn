@@ -6,7 +6,7 @@ import Item from "@/models/Item";
 export async function GET() {
   try {
     await connectToDatabase();
-    const items = await Item.find({}).sort({ item: 1 });
+    const items = await Item.find({}).sort({ item: 1 }).populate("bundleItems.item");
     return NextResponse.json(items);
   } catch (error) {
     console.error("Failed to fetch items:", error);

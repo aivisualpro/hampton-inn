@@ -10,6 +10,8 @@ export interface IItem extends Document {
   restockPackageQty: number;
   defaultKingRoomQty: number;
   defaultDoubleQueenQty: number;
+  isBundle?: boolean;
+  bundleItems?: { item: string; quantity: number }[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -24,6 +26,13 @@ const ItemSchema: Schema = new Schema(
     restockPackageQty: { type: Number, required: true, default: 0 },
     defaultKingRoomQty: { type: Number, required: true, default: 0 },
     defaultDoubleQueenQty: { type: Number, required: true, default: 0 },
+    isBundle: { type: Boolean, default: false },
+    bundleItems: [
+      {
+        item: { type: Schema.Types.ObjectId, ref: "Item" },
+        quantity: { type: Number, required: true, default: 1 },
+      },
+    ],
   },
   {
     timestamps: true,

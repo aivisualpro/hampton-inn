@@ -58,6 +58,9 @@ type Item = {
   item: string;
   category: string;
   subCategory: string;
+  subCategory: string;
+  isDailyCount?: boolean;
+  cookingQty?: string;
   costPerPackage: number;
   package: string;
   restockPackageQty: number;
@@ -291,6 +294,8 @@ function ItemsContent() {
     defaultDoubleQueenQty: 0,
     isBundle: false,
     bundleItems: [] as { item: string; quantity: number }[],
+    isDailyCount: false,
+    cookingQty: "",
   });
   const [formLoading, setFormLoading] = useState(false);
   const router = useRouter();
@@ -376,6 +381,8 @@ function ItemsContent() {
           item: typeof b.item === 'object' ? (b.item as any)._id : b.item, 
           quantity: b.quantity 
         })) : [],
+        isDailyCount: item.isDailyCount || false,
+        cookingQty: item.cookingQty || "",
       });
     } else {
       setEditingItem(null);
@@ -390,6 +397,8 @@ function ItemsContent() {
         defaultDoubleQueenQty: 0,
         isBundle: false,
         bundleItems: [],
+        isDailyCount: false,
+        cookingQty: "",
       });
     }
     setIsDialogOpen(true);
@@ -588,7 +597,13 @@ function ItemsContent() {
                       <Pencil className="mr-2 h-4 w-4" />
                       Quick Edit
                     </Button>
+                      Quick Edit
+                    </Button>
                   )}
+                  <Button size="sm" onClick={() => handleOpenDialog()} className="h-9">
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Item
+                  </Button>
                 </div>
               </div>
 
@@ -601,6 +616,7 @@ function ItemsContent() {
                       <TableRow className="hover:bg-transparent border-b">
                         <TableHead className="w-[300px] font-semibold pl-4 bg-white">Item</TableHead>
                         <TableHead className="font-semibold bg-white">Category</TableHead>
+                        <TableHead className="font-semibold bg-white">Sub Category</TableHead>
                         <TableHead className="font-semibold bg-white">Cost/Pkg</TableHead>
                         <TableHead className="font-semibold bg-white">Package</TableHead>
                         {!isQuickEditMode && (
@@ -665,6 +681,7 @@ function ItemsContent() {
                                     {item.item}
                                   </div>
                                   {item.subCategory && <div className="text-xs text-muted-foreground">{item.subCategory}</div>}
+                                  </div>
                                 </>
                               )}
                             </TableCell>
@@ -690,6 +707,19 @@ function ItemsContent() {
                                   <option value="Breakfast" />
                                 </datalist>
                               )}
+                            </TableCell>
+                            <TableCell className="py-1">
+                                {isQuickEditMode ? (
+                                    <Input 
+                                        value={editedItems[item._id]?.subCategory ?? item.subCategory ?? ""} 
+                                        onChange={(e) => handleQuickEditChange(item._id, "subCategory", e.target.value)}
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="h-7 text-xs"
+                                        placeholder="Sub Category"
+                                    />
+                                ) : (
+                                    item.subCategory || "-"
+                                )}
                             </TableCell>
                             <TableCell className="py-1">
                               {isQuickEditMode ? (
@@ -1115,6 +1145,32 @@ function ItemsContent() {
                    </div>
                  )}
               </div>
+              </div>
+            )}
+
+            <div className="flex items-center space-x-2 border-t pt-4">
+               <input
+                 type="checkbox"
+                 id="isDailyCount"
+                 className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                 checked={formData.isDailyCount || false}
+                 onChange={(e) => setFormData({ ...formData, isDailyCount: e.target.checked })}
+               />
+               <Label htmlFor="isDailyCount" className="font-medium cursor-pointer">
+                 Show in Daily Occupancy?
+               </Label>
+            </div>
+
+            {formData.isDailyCount && (
+                <div className="grid gap-2 border bg-muted/20 p-3 rounded-md">
+                    <Label htmlFor="cookingQty">Cooking Quantity (e.g. "1 tray = 1 bag")</Label>
+                    <Input
+                        id="cookingQty"
+                        value={formData.cookingQty || ""}
+                        onChange={(e) => setFormData({ ...formData, cookingQty: e.target.value })}
+                        placeholder="Optional description"
+                    />
+                </div>
             )}
 
                <div className="grid gap-2">

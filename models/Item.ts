@@ -12,6 +12,8 @@ export interface IItem extends Document {
   defaultDoubleQueenQty: number;
   isBundle?: boolean;
   bundleItems?: { item: string; quantity: number }[];
+  isDailyCount?: boolean;
+  cookingQty?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -33,6 +35,8 @@ const ItemSchema: Schema = new Schema(
         quantity: { type: Number, required: true, default: 1 },
       },
     ],
+    isDailyCount: { type: Boolean, default: false },
+    cookingQty: { type: String, required: false },
   },
   {
     timestamps: true,

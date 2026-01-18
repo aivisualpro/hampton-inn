@@ -70,6 +70,7 @@ export default function Home() {
       color: "text-purple-600",
       image: "/bg_daily_occupancy.png",
       value: "View",
+      href: "/daily-occupancy",
     },
 
   ];

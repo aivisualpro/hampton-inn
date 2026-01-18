@@ -11,7 +11,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Plus, Pencil, Trash2, MoreHorizontal, X, ChevronRight, ChevronLeft, Search } from "lucide-react";
+import { Loader2, Plus, Pencil, Trash2, MoreHorizontal, X, ChevronRight, ChevronLeft, Search, Eye, Copy, ClipboardPaste } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import {
@@ -213,6 +213,8 @@ export default function LocationsPage() {
     items: [] as string[],
   });
   const [formLoading, setFormLoading] = useState(false);
+  const [copiedItems, setCopiedItems] = useState<string[]>([]);
+  const [isPasting, setIsPasting] = useState(false);
 
   const fetchItems = async () => {
     try {
@@ -365,6 +367,48 @@ export default function LocationsPage() {
     }
   };
 
+  const handleCopyItems = (location: Location) => {
+    if (location.items && location.items.length > 0) {
+      setCopiedItems(location.items);
+      // Optional: Show toast "Items copied"
+    }
+  };
+
+  const handlePasteItems = async (targetLocation: Location) => {
+    if (copiedItems.length === 0) return;
+    
+    setIsPasting(true);
+    try {
+      // Deduplicate: merge current items with copied items, using Set to ensure uniqueness
+      const currentItems = new Set(targetLocation.items || []);
+      const newItemsCount = copiedItems.filter(id => !currentItems.has(id)).length;
+      
+      if (newItemsCount === 0) {
+         // No new items to add
+         setIsPasting(false);
+         return;
+      }
+
+      copiedItems.forEach(id => currentItems.add(id));
+      const updatedItems = Array.from(currentItems);
+
+      const res = await fetch(`/api/locations/${targetLocation._id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...targetLocation, items: updatedItems }),
+      });
+
+      if (!res.ok) throw new Error("Failed to paste items");
+
+      await fetchLocations();
+
+    } catch (error) {
+       console.error("Error pasting items:", error);
+    } finally {
+       setIsPasting(false);
+    }
+  };
+
   return (
 
     <div className="h-full flex flex-col overflow-hidden">
@@ -463,8 +507,21 @@ export default function LocationsPage() {
                           <DropdownMenuContent align="end">
                             <DropdownMenuLabel>Actions</DropdownMenuLabel>
                             <DropdownMenuItem onClick={() => setViewingLocation(location)}>
-                              View Details
+                               <Eye className="mr-2 h-4 w-4" />
+                               Details
                             </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleCopyItems(location)}>
+                              <Copy className="mr-2 h-4 w-4" />
+                              Copy Items
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => handlePasteItems(location)}
+                              disabled={copiedItems.length === 0 || isPasting}
+                            >
+                              <ClipboardPaste className="mr-2 h-4 w-4" />
+                              Paste Items
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => handleOpenDialog(location)}>
                               <Pencil className="mr-2 h-4 w-4" />
                               Edit
@@ -512,6 +569,22 @@ export default function LocationsPage() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => setViewingLocation(location)}>
+                               <Eye className="mr-2 h-4 w-4" />
+                               Details
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleCopyItems(location)}>
+                               <Copy className="mr-2 h-4 w-4" />
+                               Copy Items
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
+                              onClick={() => handlePasteItems(location)}
+                              disabled={copiedItems.length === 0 || isPasting}
+                            >
+                               <ClipboardPaste className="mr-2 h-4 w-4" />
+                               Paste Items
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
                             <DropdownMenuItem onClick={() => handleOpenDialog(location)}>
                               <Pencil className="mr-2 h-4 w-4" />
                               Edit

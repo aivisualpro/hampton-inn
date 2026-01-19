@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { Loader2, Calendar, Save, ChevronRight, ChevronLeft, Search, Edit2, X } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -38,12 +39,24 @@ const calculateTotal = (item: SoakCycleItem) => {
     return (item.previousBalance || 0) + (item.soakUnit || 0) - (item.disposedUnit || 0);
 };
 
+const sortItems = (a: SoakCycleItem, b: SoakCycleItem) => {
+    // 1. Sort by Total (Descending)
+    const totalA = calculateTotal(a);
+    const totalB = calculateTotal(b);
+    if (totalB !== totalA) {
+        return totalB - totalA;
+    }
+    // 2. Sort by Item Name (Ascending)
+    return a.item.localeCompare(b.item);
+};
+
 function SoakCycleContent() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [items, setItems] = useState<SoakCycleItem[]>([]);
   const [laundryLocationId, setLaundryLocationId] = useState<string | null>(null);
+  const { toast } = useToast();
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -65,15 +78,50 @@ function SoakCycleContent() {
   const searchQuery = searchParams.get("q") || "";
 
   // Helper to update URL
-  const updateUrl = (key: string, value: string | null) => {
-      const params = new URLSearchParams(searchParams);
+  const saveDatePreference = async (dateStr: string) => {
+      try {
+          await fetch("/api/auth/me", {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ lastSelectedDate: dateStr })
+          });
+      } catch(e) {
+          console.error("Failed to save date preference", e);
+      }
+  };
+
+  // Helper to update URL
+  const updateUrl = useCallback((key: string, value: string | null) => {
+      const params = new URLSearchParams(searchParams.toString());
       if (value) {
           params.set(key, value);
       } else {
           params.delete(key);
       }
       router.replace(`${pathname}?${params.toString()}`);
-  };  
+      
+      if (key === "date" && value) {
+          saveDatePreference(value);
+      }
+  }, [searchParams, pathname, router]);
+
+  const [dateInputValue, setDateInputValue] = useState(selectedDate);
+
+  // Sync local state with URL state
+  useEffect(() => {
+    setDateInputValue(selectedDate);
+  }, [selectedDate]);
+
+  // Debounce URL update
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (dateInputValue !== selectedDate) {
+        updateUrl("date", dateInputValue);
+      }
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [dateInputValue, selectedDate, updateUrl]);  
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
@@ -81,16 +129,7 @@ function SoakCycleContent() {
   // Filter & Paginate
   const filteredItems = items.filter((item) => 
     item.item.toLowerCase().includes(searchQuery.toLowerCase())
-  ).sort((a, b) => {
-      // 1. Sort by Total (Descending)
-      const totalA = calculateTotal(a);
-      const totalB = calculateTotal(b);
-      if (totalB !== totalA) {
-          return totalB - totalA;
-      }
-      // 2. Sort by Item Name (Ascending)
-      return a.item.localeCompare(b.item);
-  });
+  );
 
   const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
   const paginatedItems = filteredItems.slice(
@@ -109,7 +148,7 @@ function SoakCycleContent() {
       try {
         setLoading(true);
         // 1. Fetch all locations to find "Laundry"
-        const locRes = await fetch("/api/locations");
+        const locRes = await fetch("/api/locations", { cache: "no-store" });
         if (!locRes.ok) throw new Error("Failed to fetch locations");
         const locations = await locRes.json();
         
@@ -124,7 +163,7 @@ function SoakCycleContent() {
         setLaundryLocationId(laundry._id);
 
         // 2. Fetch all Items (for names)
-        const itemsRes = await fetch("/api/items");
+        const itemsRes = await fetch("/api/items", { cache: "no-store" });
         if (!itemsRes.ok) throw new Error("Failed to fetch items");
         const allItems = await itemsRes.json();
         
@@ -134,6 +173,22 @@ function SoakCycleContent() {
         const laundryItems = allItems.filter((item: any) => 
           laundryItemIds.includes(item._id)
         );
+        
+        // Check for saved user date preference if no date in URL
+        const urlDate = searchParams.get("date");
+        if (!urlDate) {
+            try {
+                const userRes = await fetch("/api/auth/me");
+                if (userRes.ok) {
+                    const user = await userRes.json();
+                    if (user.lastSelectedDate) {
+                        updateUrl("date", user.lastSelectedDate);
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to fetch user date preference", e);
+            }
+        }
         
         // Initialize state with these items (values 0 for now)
         const initializedItems = laundryItems.map((item: any) => ({
@@ -176,8 +231,8 @@ function SoakCycleContent() {
               
               // Parallel fetch: Previous Balances + Current Transactions
               const [openingRes, currentRes] = await Promise.all([
-                  fetch(`/api/stock/opening-balance?${params}`),
-                  fetch(`/api/transactions?${params}`)
+                  fetch(`/api/stock/opening-balance?${params}`, { cache: "no-store" }),
+                  fetch(`/api/transactions?${params}`, { cache: "no-store" })
               ]);
 
               const openingBalances = await openingRes.json();
@@ -212,7 +267,7 @@ function SoakCycleContent() {
                     soakUnit,
                     disposedUnit,
                 };
-              }));
+              }).sort(sortItems));
             } catch(e) { 
                 console.error(e); 
             } finally {
@@ -233,6 +288,12 @@ function SoakCycleContent() {
 
   const handleSave = async () => {
     if (!laundryLocationId) return;
+    
+    // Optimistic Update
+    setIsEditing(false);
+    setItems(prev => [...prev].sort(sortItems)); 
+    toast({ title: "Updates applied", description: "Syncing..." });
+
     setSaving(true);
     try {
       // Filter items: Don't add transaction if Soak, Disposed, and Total are all 0
@@ -258,12 +319,14 @@ function SoakCycleContent() {
       });
       
       await Promise.all(promises);
-      // Optional: Show success toast
+      
+      toast({ title: "Success", description: "Saved successfully." });
     } catch (error) {
       console.error("Error saving data:", error);
+      toast({ variant: "destructive", title: "Save Failed", description: "Please try again." });
+      setIsEditing(true); // Re-enable edit mode on failure
     } finally {
       setSaving(false);
-      setIsEditing(false); // Exit edit mode on success
     }
   };
 
@@ -307,8 +370,8 @@ function SoakCycleContent() {
               <Calendar className="h-4 w-4 text-muted-foreground" />
               <Input
                 type="date"
-                value={selectedDate}
-                onChange={(e) => updateUrl("date", e.target.value)}
+                value={dateInputValue}
+                onChange={(e) => setDateInputValue(e.target.value)}
                 className="w-auto h-8"
               />
             </div>
@@ -381,7 +444,11 @@ function SoakCycleContent() {
                         ) : (
                             paginatedItems.map((item) => (
                                 <TableRow key={item._id} className="hover:bg-muted/50 border-b group">
-                                    <TableCell className="font-medium pl-4">{item.item}</TableCell>
+                                    <TableCell className="font-medium pl-4">
+                                        <Link href={`/admin/items/${item._id}`} className="hover:underline hover:text-primary">
+                                            {item.item}
+                                        </Link>
+                                    </TableCell>
                                     <TableCell className="text-center p-1 bg-gray-50/30">
                                         <div className="w-20 mx-auto text-center h-8 flex items-center justify-center font-medium text-gray-700">
                                             {item.previousBalance}
@@ -394,6 +461,7 @@ function SoakCycleContent() {
                                                 className="w-20 mx-auto text-center h-8 bg-yellow-100/50 border-yellow-200 focus-visible:ring-yellow-400"
                                                 value={item.soakUnit}
                                                 onChange={(e) => handleValueChange(item._id, "soakUnit", e.target.value)}
+                                                onWheel={(e) => (e.target as HTMLInputElement).blur()}
                                             />
                                         ) : (
                                             <div className="w-20 mx-auto text-center h-8 flex items-center justify-center font-medium">
@@ -408,6 +476,7 @@ function SoakCycleContent() {
                                                 className="w-20 mx-auto text-center h-8"
                                                 value={item.disposedUnit}
                                                 onChange={(e) => handleValueChange(item._id, "disposedUnit", e.target.value)}
+                                                onWheel={(e) => (e.target as HTMLInputElement).blur()}
                                             />
                                          ) : (
                                             <div className="w-20 mx-auto text-center h-8 flex items-center justify-center font-medium">

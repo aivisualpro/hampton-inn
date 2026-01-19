@@ -10,12 +10,39 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Upload, FileSpreadsheet, Loader2, CheckCircle, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useRef, useState } from "react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useRef, useState, useEffect } from "react";
 
 export default function SettingsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [status, setStatus] = useState<{type: 'success' | 'error' | null, message: string}>({ type: null, message: '' });
+  
+  // General Settings State
+  const [settings, setSettings] = useState({
+      defaultKingRoomCount: 0,
+      defaultDoubleQueenRoomCount: 0,
+      parLevelThreshold: 1
+  });
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+
+  // Fetch Settings on Mount
+  useEffect(() => {
+      fetch("/api/settings")
+          .then(res => res.json())
+          .then(data => {
+              if (data && !data.error) {
+                  setSettings({
+                      defaultKingRoomCount: data.defaultKingRoomCount || 0,
+                      defaultDoubleQueenRoomCount: data.defaultDoubleQueenRoomCount || 0,
+                      parLevelThreshold: data.parLevelThreshold ?? 1
+                  });
+              }
+          })
+          .catch(console.error);
+  }, []);
 
   const handleClick = () => {
     fileInputRef.current?.click();
@@ -92,6 +119,22 @@ export default function SettingsPage() {
     }
   };
 
+  const handleSaveSettings = async () => {
+      setSettingsSaving(true);
+      try {
+          await fetch("/api/settings", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(settings)
+          });
+          // Show quick success state if needed
+      } catch(e) {
+          console.error(e);
+      } finally {
+          setSettingsSaving(false);
+      }
+  }
+
   const downloadTemplate = () => {
     const headers = [
       "Item",
@@ -130,8 +173,7 @@ export default function SettingsPage() {
               </TabsTrigger>
               <TabsTrigger 
                 value="general" 
-                disabled 
-                className="opacity-50 cursor-not-allowed rounded-none px-2 pb-2 data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary"
+                className="rounded-none px-2 pb-2 data-[state=active]:bg-transparent data-[state=active]:shadow-none data-[state=active]:border-b-2 data-[state=active]:border-primary transition-none"
               >
                 General
               </TabsTrigger>
@@ -189,8 +231,57 @@ export default function SettingsPage() {
           </div>
         </TabsContent>
         
-        <TabsContent value="general">
-           {/* Placeholder for future general settings */}
+        <TabsContent value="general" className="flex-1 p-4 space-y-6 m-0 overflow-auto">
+            <Card>
+                <CardHeader>
+                    <CardTitle className="text-base">Room Configuration</CardTitle>
+                    <CardDescription>Set the total number of rooms for each type in the hotel.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="kingRooms"># of King Rooms</Label>
+                            <Input 
+                                id="kingRooms" 
+                                type="number" 
+                                min="0"
+                                value={settings.defaultKingRoomCount} 
+                                onChange={(e) => setSettings({...settings, defaultKingRoomCount: parseInt(e.target.value) || 0})}
+                                onWheel={(e) => e.currentTarget.blur()}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="queenRooms"># of Double Queen Rooms</Label>
+                            <Input 
+                                id="queenRooms" 
+                                type="number" 
+                                min="0"
+                                value={settings.defaultDoubleQueenRoomCount} 
+                                onChange={(e) => setSettings({...settings, defaultDoubleQueenRoomCount: parseInt(e.target.value) || 0})}
+                                onWheel={(e) => e.currentTarget.blur()}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label htmlFor="parThreshold">Par Level Threshold</Label>
+                            <Input 
+                                id="parThreshold" 
+                                type="number" 
+                                min="0"
+                                step="0.1"
+                                value={settings.parLevelThreshold} 
+                                onChange={(e) => setSettings({...settings, parLevelThreshold: parseFloat(e.target.value) || 0})}
+                                onWheel={(e) => e.currentTarget.blur()}
+                            />
+                        </div>
+                    </div>
+                    <div className="flex justify-start pt-4">
+                         <Button onClick={handleSaveSettings} disabled={settingsSaving}>
+                            {settingsSaving ? <Loader2 className="h-4 w-4 animate-spin mr-2"/> : null}
+                            Save Changes
+                         </Button>
+                    </div>
+                </CardContent>
+            </Card>
         </TabsContent>
       </Tabs>
     </div>

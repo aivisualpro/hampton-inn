@@ -11,6 +11,7 @@ export interface ITransaction extends Document {
   consumedUnit: number;
   consumedPackage: number;
   soakUnit: number; // For tracking items in soak cycle
+  relatedParentItem?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -27,6 +28,7 @@ const TransactionSchema: Schema = new Schema(
     consumedUnit: { type: Number, default: 0 },
     consumedPackage: { type: Number, default: 0 },
     soakUnit: { type: Number, default: 0 },
+    relatedParentItem: { type: Schema.Types.ObjectId, ref: "Item", required: false },
   },
   {
     timestamps: true,

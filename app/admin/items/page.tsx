@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, Plus, Pencil, Trash2, MoreHorizontal, Search, Check, X, Save, ChevronLeft, ChevronRight, Layers } from "lucide-react";
+import { Loader2, Plus, Pencil, Trash2, MoreHorizontal, Search, Check, X, Save, ChevronLeft, ChevronRight, Layers, Utensils } from "lucide-react";
 import { useRef, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -232,9 +232,7 @@ function ItemsContent() {
   const [saveLoading, setSaveLoading] = useState(false);
 
   // Pagination & Infinite Scroll states
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 20;
-  const [mobileVisibleCount, setMobileVisibleCount] = useState(20);
+  const [visibleCount, setVisibleCount] = useState(20);
   
   const filteredItems = items.filter(item => 
     item.item.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -243,42 +241,32 @@ function ItemsContent() {
     (item.package && item.package.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
-  // Desktop Pagination
-  const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
-  const paginatedItems = filteredItems.slice(
-    (currentPage - 1) * itemsPerPage, 
-    currentPage * itemsPerPage
-  );
-
-  // Mobile Infinite Scroll
-  const mobileItems = filteredItems.slice(0, mobileVisibleCount);
-  const observerTarget = useRef(null);
+  // Unified Infinite Scroll items
+  const displayItems = filteredItems.slice(0, visibleCount);
+  const desktopObserverTarget = useRef(null);
+  const mobileObserverTarget = useRef(null);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && mobileVisibleCount < filteredItems.length) {
-          setMobileVisibleCount((prev) => prev + 20);
+        if (entries.some(entry => entry.isIntersecting) && visibleCount < filteredItems.length) {
+          setVisibleCount((prev) => prev + 20);
         }
       },
-      { threshold: 1.0 }
+      { threshold: 0.1 }
     );
 
-    if (observerTarget.current) {
-      observer.observe(observerTarget.current);
-    }
+    if (desktopObserverTarget.current) observer.observe(desktopObserverTarget.current);
+    if (mobileObserverTarget.current) observer.observe(mobileObserverTarget.current);
 
     return () => {
-      if (observerTarget.current) {
-        observer.unobserve(observerTarget.current);
-      }
+      observer.disconnect();
     };
-  }, [observerTarget, mobileVisibleCount, filteredItems.length]);
+  }, [visibleCount, filteredItems.length]);
   
   // Reset pagination when search changes
   useEffect(() => {
-    setCurrentPage(1);
-    setMobileVisibleCount(20);
+    setVisibleCount(20);
   }, [searchQuery]);
   
   // Form states
@@ -638,14 +626,14 @@ function ItemsContent() {
                             </div>
                           </TableCell>
                         </TableRow>
-                      ) : paginatedItems.length === 0 ? (
+                      ) : displayItems.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={isQuickEditMode ? 8 : 10} className="h-24 text-center text-muted-foreground">
                             No items found.
                           </TableCell>
                         </TableRow>
                       ) : (
-                        paginatedItems.map((item) => (
+                        displayItems.map((item) => (
                           <TableRow 
                             key={item._id} 
                             className={cn(
@@ -665,6 +653,7 @@ function ItemsContent() {
                               ) : (
                                 <div className="font-medium hover:underline text-primary flex items-center gap-2">
                                   {item.isBundle && <Layers className="h-3 w-3 text-amber-500" />}
+                                  {item.isDailyCount && <Utensils className="h-3 w-3 text-orange-500" />}
                                   {item.item}
                                 </div>
                               )}
@@ -823,35 +812,21 @@ function ItemsContent() {
                       )}
                     </TableBody>
                   </table>
+
+                  {/* Sentinel inside scroll container */}
+                  <div ref={desktopObserverTarget} className="h-4 w-full" />
+                  {visibleCount < filteredItems.length && (
+                    <div className="flex justify-center py-4">
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    </div>
+                  )}
                 </div>
 
-                {/* Desktop Pagination Controls */}
+                {/* Footer with Count Summary */}
                 {!loading && filteredItems.length > 0 && (
-                  <div className="flex-none flex items-center justify-end space-x-2 p-2 border-t bg-white z-20">
-                    <div className="flex-1 text-sm text-muted-foreground">
-                      Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredItems.length)} of {filteredItems.length} entries
-                    </div>
-                    <div className="space-x-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                        disabled={currentPage === 1}
-                        className="h-8"
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                        Previous
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                        disabled={currentPage === totalPages}
-                        className="h-8"
-                      >
-                        Next
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
+                  <div className="flex-none flex items-center justify-between p-2 border-t bg-white z-20">
+                    <div className="text-sm text-muted-foreground">
+                      Showing {displayItems.length} of {filteredItems.length} entries
                     </div>
                   </div>
                 )}
@@ -877,13 +852,13 @@ function ItemsContent() {
                  <div className="flex items-center justify-center py-8">
                     <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                  </div>
-              ) : mobileItems.length === 0 ? (
+              ) : displayItems.length === 0 ? (
                  <div className="text-center text-muted-foreground py-8">
                    No items found.
                  </div>
               ) : (
-                <>
-                {mobileItems.map((item) => (
+                 <>
+                {displayItems.map((item) => (
                   <Card key={item._id} className="bg-white shadow-sm border">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                        <div>
@@ -990,8 +965,8 @@ function ItemsContent() {
                   </Card>
                 ))}
                 {/* Sentinel for Infinite Scroll */}
-                <div ref={observerTarget} className="h-4 w-full" />
-                {mobileVisibleCount < filteredItems.length && (
+                <div ref={mobileObserverTarget} className="h-4 w-full" />
+                {visibleCount < filteredItems.length && (
                    <div className="flex justify-center py-4">
                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                    </div>
@@ -1004,16 +979,7 @@ function ItemsContent() {
         </CardContent>
       </Card>
 
-      {/* Floating Action Button - only show when not in edit mode */}
-      {!isQuickEditMode && (
-        <Button
-          onClick={() => handleOpenDialog()}
-          className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg z-50 p-0"
-        >
-          <Plus className="h-6 w-6" />
-          <span className="sr-only">Add Item</span>
-        </Button>
-      )}
+
 
       {/* Edit/Add Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

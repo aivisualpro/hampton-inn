@@ -4,7 +4,7 @@
 import { useEffect, useState, useCallback, Suspense, Fragment } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { Loader2, Calendar, Pencil, Save, ChevronRight, ChevronLeft, Search } from "lucide-react";
+import { Loader2, Calendar, Pencil, Save, ChevronRight, ChevronLeft, Search, Utensils } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -55,6 +55,8 @@ function DailyOccupancyContent() {
   const [isOccupancyEditing, setIsOccupancyEditing] = useState(false);
   const [tempOccupancyCount, setTempOccupancyCount] = useState<number>(0);
 
+  const [kitchenId, setKitchenId] = useState<string | null>(null);
+
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -89,10 +91,25 @@ function DailyOccupancyContent() {
       router.replace(`${pathname}?${params.toString()}`);
   };
 
+  const saveDatePreference = async (dateStr: string) => {
+      try {
+          await fetch("/api/auth/me", {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ lastSelectedDate: dateStr })
+          });
+      } catch(e) {
+         console.error("Failed to save date preference", e);
+      }
+  };
+
   const handleDateInput = (e: React.ChangeEvent<HTMLInputElement>) => {
       const val = e.target.value;
       setDateInputValue(val);
-      if (val) updateUrl("date", val);
+      if (val) {
+          updateUrl("date", val);
+          saveDatePreference(val);
+      }
   };
 
   const handlePrevDay = () => {
@@ -100,6 +117,7 @@ function DailyOccupancyContent() {
     currentDate.setDate(currentDate.getDate() - 1);
     const newDateStr = currentDate.toISOString().split('T')[0];
     updateUrl("date", newDateStr);
+    saveDatePreference(newDateStr);
   };
 
   const handleNextDay = () => {
@@ -107,6 +125,7 @@ function DailyOccupancyContent() {
     currentDate.setDate(currentDate.getDate() + 1);
     const newDateStr = currentDate.toISOString().split('T')[0];
     updateUrl("date", newDateStr);
+    saveDatePreference(newDateStr);
   };
 
 
@@ -128,67 +147,36 @@ function DailyOccupancyContent() {
            // Filter for Daily Count items
            const dailyItems = allItemsData.filter(i => i.isDailyCount);
 
-           // 2. Fetch Transactions (for Consumption/Purchase/Opening) logic
-           // Ideally we reuse the existing APIs.
-           // Since we need Opening Balance for these items:
-           // We can mock a "Location" ID if we were using location logic, but here it seems global or per location?
-           // The prompt says "mark item if that belong to daily occupancy page".
-           // It implies this is a general "Kitchen" or centralized view?
-           // Or does it depend on location? "location selected in cons column" -> "will go to the ledger/transactions of that ledger with location selected"
-           // Wait, the prompt says "say opening balance was 3 and count units 1 it means 2 was cons. will go to the ledger/transactions of that ledger with location selected in cons column".
-           // This implies this page might need a LOCATION selector too?
-           // BUT the new prompt says "Daily Occupancy Page" and lists columns. It DOES NOT mention Location Selector.
-           // However, if we save transactions, we NEED a location.
-           // Assumption: We might need a "Default" location or "Main Kitchen" location. or we add a location selector.
-           // Given the previous chat about "Persist Stock Count Location", user is used to locations.
-           // Use case: "Daily Room Occupancy" suggests Housekeeping. Items like "Coffee", "Soap".
-           // These are usually tracked per location (e.g. 2nd Floor Closet).
-           // BUT "Daily Occupancy Page" usually aggregates or serves a specific workflow.
-           // Let's assume we need a Location Selector similarly to Stock Count, OR we work across ALL locations (which is complex).
-           // Let's add a Location Selector to be safe/consistent, OR use the user's persisted location.
-           // Wait, "Cooking Qty" implies Kitchen/Food. "Package is 10 bags".
-           // Let's stick to the request: "search, edit records and date fields in the pageheader just like soak cycle".
-           // Soak Cycle has a location selector (wait, Soak Cycle page does NOT have a location selector in my memory, it aggregates? check soak cycle code if needed. Actually, previous summary said Soak Cycle has search.).
-           // Let's look at Soak Cycle page... I can't view it easily without tool call.
-           // Let's assume we need a location selector because Transactions require a location.
-           // I will add a Location Selector.
-
            // Fetch User & Locations
            const [userRes, locRes, occupancyRes] = await Promise.all([
                fetch("/api/auth/me"),
                fetch("/api/locations"),
                fetch(`/api/occupancy?date=${selectedDate}`)
            ]);
-           
-           const user = await userRes.json();
-           const locations = await locRes.json();
+                      const user = await userRes.json();
+            
+            // Check for saved date preference if no date in URL
+            const urlDate = searchParams.get("date");
+            if (!urlDate && user.lastSelectedDate && user.lastSelectedDate !== selectedDate) {
+                 updateUrl("date", user.lastSelectedDate);
+                 return; // Stop loading for "Today", wait for redirect
+            }
+
+            const locations = await locRes.json();
            const occupancyData = await occupancyRes.json();
            
            setOccupancyCount(occupancyData.count || 0);
 
-           // Determine Location
-           // Reuse logic from Stock Count
-           let targetLocationId = searchParams.get("location");
-           if (!targetLocationId && user.lastSelectedLocation) {
-                targetLocationId = user.lastSelectedLocation;
-           }
-           if (!targetLocationId && locations.length > 0) {
-               targetLocationId = locations[0]._id;
-           }
+           // Determine Location - Always Kitchen
+           const kitchen = locations.find((l: any) => l.name.toLowerCase() === "kitchen");
            
-           if (!targetLocationId) {
-               // Handle no location case
-               console.warn("No location found");
+           if (!kitchen) {
+               console.warn("Kitchen location not found");
                setLoading(false);
                return;
            }
-           // IMPORTANT: Update URL if we defaulted
-           if (targetLocationId !== searchParams.get("location")) {
-               updateUrl("location", targetLocationId);
-               // We will re-run because URL changes.
-               return; 
-           }
-
+           const targetLocationId = kitchen._id;
+           setKitchenId(targetLocationId);
 
            // 3. Fetch Opening Balances & Current Transactions for this Location & Date
             const params = new URLSearchParams({
@@ -210,7 +198,12 @@ function DailyOccupancyContent() {
             
             const transMap = transactions.reduce((acc: any, curr: any) => ({...acc, [curr.item]: curr}), {});
 
-            const mappedItems = dailyItems.map(item => {
+            // Filter items to only those assigned to the current location
+            const targetLocation = kitchen;
+            const validItemIds = targetLocation?.items || [];
+            const locationDailyItems = dailyItems.filter(item => validItemIds.includes(item._id));
+
+            const mappedItems = locationDailyItems.map(item => {
                 const t = transMap[item._id];
                 return {
                     ...item,
@@ -270,10 +263,20 @@ function DailyOccupancyContent() {
    const handleSaveStock = async () => {
        setSaving(true);
        try {
-           const locationId = searchParams.get("location");
-           if (!locationId) throw new Error("No location");
+           if (!kitchenId) throw new Error("No kitchen location found");
 
-           const promises = Object.entries(editedValues).map(([itemId, val]) => {
+           const promises = Object.entries(editedValues)
+            .filter(([itemId, val]) => {
+                const item = allItems.find(i => i._id === itemId);
+                const opening = item?.openingBalanceUnit || 0;
+                
+                // Skip if everything is zero
+                if (opening === 0 && val.purchasedUnit === 0 && val.consumedUnit === 0) {
+                    return false;
+                }
+                return true;
+            })
+            .map(([itemId, val]) => {
                // Logic:
                // In Stock Count, we save `counted` and `consumed` is derived or passed.
                // Here we Edit `consumed` and `purchased`.
@@ -290,7 +293,7 @@ function DailyOccupancyContent() {
                    body: JSON.stringify({
                        date: selectedDate,
                        item: itemId,
-                       location: locationId,
+                       location: kitchenId,
                        consumedUnit: val.consumedUnit,
                        purchasedUnit: val.purchasedUnit,
                        countedUnit: closing, // Auto-calculate closing/count
@@ -421,6 +424,11 @@ function DailyOccupancyContent() {
              <div className="flex h-full items-center justify-center">
                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
              </div>
+          ) : !kitchenId ? (
+             <div className="flex h-full items-center justify-center flex-col gap-2">
+                 <h2 className="text-lg font-semibold text-red-600">Configuration Error</h2>
+                 <p className="text-muted-foreground">"Kitchen" location not found. Please ensure a location named "Kitchen" exists.</p>
+             </div>
           ) : (
             <Table>
                 <TableHeader className="bg-muted/50 sticky top-0">
@@ -456,7 +464,14 @@ function DailyOccupancyContent() {
                                     </TableRow>
                                 )}
                                 <TableRow>
-                                    <TableCell className="font-medium pl-8">{item.item}</TableCell>
+                                    <TableCell className="font-medium pl-8">
+                                        <div className="flex items-center gap-2">
+                                            {item.isDailyCount && <Utensils className="h-3 w-3 text-orange-500" />}
+                                            <Link href={`/admin/items/${item._id}`} className="hover:underline hover:text-primary">
+                                                {item.item}
+                                            </Link>
+                                        </div>
+                                    </TableCell>
                                     <TableCell>{item.package || "-"}</TableCell>
                                     <TableCell>{item.cookingQty || "-"}</TableCell>
                                     <TableCell className="text-center">{opening}</TableCell>
@@ -465,6 +480,7 @@ function DailyOccupancyContent() {
                                             <Input type="number" min="0" value={purchase} 
                                                onChange={(e) => handleValueChange(item._id, "purchasedUnit", parseInt(e.target.value)||0)}
                                                className="w-20 mx-auto text-center h-8 border-blue-200"
+                                               onWheel={(e) => (e.target as HTMLInputElement).blur()}
                                             />
                                         ) : purchase}
                                     </TableCell>
@@ -473,6 +489,7 @@ function DailyOccupancyContent() {
                                             <Input type="number" min="0" value={consumed} 
                                                onChange={(e) => handleValueChange(item._id, "consumedUnit", parseInt(e.target.value)||0)}
                                                className="w-20 mx-auto text-center h-8 border-blue-200"
+                                               onWheel={(e) => (e.target as HTMLInputElement).blur()}
                                             />
                                         ) : consumed}
                                     </TableCell>

@@ -83,11 +83,12 @@ export async function PUT(request: NextRequest) {
     await connectToDatabase();
     
     const body = await request.json();
-    const { lastSelectedLocation } = body;
+    const { lastSelectedLocation, lastSelectedDate } = body;
 
     // Only allow updating specific fields for now
     const updateData: any = {};
     if (lastSelectedLocation !== undefined) updateData.lastSelectedLocation = lastSelectedLocation;
+    if (lastSelectedDate !== undefined) updateData.lastSelectedDate = lastSelectedDate;
 
     const user = await User.findByIdAndUpdate(
         userId, 

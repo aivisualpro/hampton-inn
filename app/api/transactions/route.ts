@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import Transaction from "@/models/Transaction";
+import mongoose from "mongoose";
 
 // GET - Fetch transactions (with optional filters)
 export async function GET(request: NextRequest) {
@@ -46,6 +47,10 @@ export async function POST(request: NextRequest) {
   try {
     await dbConnect();
     
+    // Import Item model dynamically or ensure it is registered
+    // We need it to check for bundle status
+    const ItemModel = mongoose.models.Item || mongoose.model("Item");
+
     const body = await request.json();
     const { date, item, location, countedUnit, countedPackage } = body;
     
@@ -60,7 +65,23 @@ export async function POST(request: NextRequest) {
     const [year, month, day] = date.split('-').map(Number);
     const transactionDate = new Date(Date.UTC(year, month - 1, day));
     
+    // Construct update object dynamically to avoid overwriting existing values with 0 if not provided
+    const updateData: any = {
+      date: transactionDate,
+      item,
+      location,
+    };
+
+    if (countedUnit !== undefined) updateData.countedUnit = countedUnit;
+    if (countedPackage !== undefined) updateData.countedPackage = countedPackage;
+    if (body.purchasedUnit !== undefined) updateData.purchasedUnit = body.purchasedUnit;
+    if (body.purchasedPackage !== undefined) updateData.purchasedPackage = body.purchasedPackage;
+    if (body.soakUnit !== undefined) updateData.soakUnit = body.soakUnit;
+    if (body.consumedUnit !== undefined) updateData.consumedUnit = body.consumedUnit;
+    if (body.consumedPackage !== undefined) updateData.consumedPackage = body.consumedPackage;
+
     // Upsert: Update if exists for same date/item/location, otherwise create
+    // IMPORTANT: For the MAIN transaction (from the form), relatedParentItem should be null/undefined
     const transaction = await Transaction.findOneAndUpdate(
       {
         date: {
@@ -69,22 +90,61 @@ export async function POST(request: NextRequest) {
         },
         item,
         location,
+        relatedParentItem: { $exists: false } // Ensures we don't overwrite a child transaction that accidentally matches
       },
-      {
-        date: transactionDate,
-        item,
-        location,
-        countedUnit: countedUnit !== undefined ? countedUnit : 0,
-        countedPackage: countedPackage !== undefined ? countedPackage : 0,
-        soakUnit: body.soakUnit !== undefined ? body.soakUnit : 0,
-        consumedUnit: body.consumedUnit !== undefined ? body.consumedUnit : 0,
-      },
+      updateData,
       {
         upsert: true,
         new: true,
         setDefaultsOnInsert: true,
       }
     );
+
+    // --- Bundle Logic ---
+    const itemDoc = await ItemModel.findById(item);
+    if (itemDoc && itemDoc.isBundle && itemDoc.bundleItems && itemDoc.bundleItems.length > 0) {
+      // Logic: Iterate through bundle items and create/update separate transactions for them
+      // These transactions will have 'relatedParentItem' set to the bundle item's ID
+      
+      for (const bundleItem of itemDoc.bundleItems) {
+        if (!bundleItem.item) continue;
+
+        const qtyMultiplier = bundleItem.quantity || 1;
+        const childUpdateData: any = {
+          date: transactionDate,
+          item: bundleItem.item,
+          location,
+          relatedParentItem: item, // Link to parent
+        };
+
+        // Calculate proportional values based on the PARENT transaction's current state
+        if (transaction.countedUnit !== undefined) childUpdateData.countedUnit = transaction.countedUnit * qtyMultiplier;
+        if (transaction.purchasedUnit !== undefined) childUpdateData.purchasedUnit = transaction.purchasedUnit * qtyMultiplier;
+        if (transaction.soakUnit !== undefined) childUpdateData.soakUnit = transaction.soakUnit * qtyMultiplier;
+        if (transaction.consumedUnit !== undefined) childUpdateData.consumedUnit = transaction.consumedUnit * qtyMultiplier;
+        
+        // We do NOT map package counts usually, assuming bundle logic applies to Units mostly. 
+        // If needed, we can add package logic but usually bundles are defined in Units.
+
+        await Transaction.findOneAndUpdate(
+          {
+            date: {
+              $gte: transactionDate,
+              $lt: new Date(transactionDate.getTime() + 24 * 60 * 60 * 1000),
+            },
+            item: bundleItem.item,
+            location,
+            relatedParentItem: item // Key differentiator
+          },
+          childUpdateData,
+          {
+            upsert: true,
+            new: true,
+            setDefaultsOnInsert: true,
+          }
+        );
+      }
+    }
     
     return NextResponse.json(transaction, { status: 201 });
   } catch (error) {

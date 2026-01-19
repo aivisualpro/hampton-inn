@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { Loader2, MapPin, ChevronDown, Calendar, Pencil, Save, ChevronRight, Search, ChevronLeft } from "lucide-react";
+import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -66,6 +67,7 @@ type User = {
   email: string;
   locations: string[];
   lastSelectedLocation?: string;
+  lastSelectedDate?: string;
 };
 
 function StockCountContent() {
@@ -80,6 +82,7 @@ function StockCountContent() {
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editedValues, setEditedValues] = useState<EditedValues>({});
+  const { toast } = useToast();
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -88,6 +91,12 @@ function StockCountContent() {
   const getDateFromUrl = () => {
     const paramDate = searchParams.get("date");
     if (paramDate) return paramDate;
+    
+    // Fallback logic moved to useEffect to wait for user data, 
+    // but initially we return current date or wait?
+    // Let's keep returning Today as default for initial render, 
+    // and let useEffect override it if user has a saved date.
+    
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -115,12 +124,25 @@ function StockCountContent() {
       router.replace(`${pathname}?${params.toString()}`);
   };
 
+  const saveDatePreference = async (dateStr: string) => {
+      try {
+          await fetch("/api/auth/me", {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ lastSelectedDate: dateStr })
+          });
+      } catch(e) {
+          console.error("Failed to save date preference", e);
+      }
+  };
+
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newDate = e.target.value;
     setDateInputValue(newDate);
     // Only update URL if it's a valid date string (standard date input returns YYYY-MM-DD or empty)
     if (newDate) {
         updateUrl("date", newDate);
+        saveDatePreference(newDate);
     }
   };
 
@@ -129,6 +151,7 @@ function StockCountContent() {
     currentDate.setDate(currentDate.getDate() - 1);
     const newDateStr = currentDate.toISOString().split('T')[0];
     updateUrl("date", newDateStr);
+    saveDatePreference(newDateStr);
   };
 
   const handleNextDay = () => {
@@ -136,6 +159,7 @@ function StockCountContent() {
     currentDate.setDate(currentDate.getDate() + 1);
     const newDateStr = currentDate.toISOString().split('T')[0];
     updateUrl("date", newDateStr);
+    saveDatePreference(newDateStr);
   };
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -189,15 +213,37 @@ function StockCountContent() {
   };
 
   // Fetch transactions and opening balances for the selected date and location
-  const fetchTransactions = useCallback(async () => {
+  // Fetch transactions and opening balances for the selected date and location
+  const findTransactions = useCallback(async () => {
     if (!selectedLocation || !selectedDate) {
       setTransactions([]);
+      setOpeningBalancesMap({});
       return;
     }
-    
-    // We will handle data merging in effect, here we just trigger/set state if needed or let useEffect handle it
-    // But to keep consistency with previous pattern, we might want to fetch here and set state
-    // converting this to a data loader function called by useEffect seems cleaner as done in soak-cycle
+
+    try {
+      const params = new URLSearchParams({
+        date: selectedDate,
+        location: selectedLocation._id,
+      });
+
+      const [openingRes, currentRes] = await Promise.all([
+        fetch(`/api/stock/opening-balance?${params}`),
+        fetch(`/api/transactions?${params}`)
+      ]);
+
+      const openingData = await openingRes.json();
+      const currentData = await currentRes.json();
+
+      setTransactions(currentData);
+      setOpeningBalancesMap(
+        Array.isArray(openingData) ?
+          openingData.reduce((acc: any, curr: any) => ({ ...acc, [curr.item]: curr }), {})
+          : {}
+      );
+    } catch (e) {
+      console.error(e);
+    }
   }, [selectedLocation, selectedDate]);
 
   useEffect(() => {
@@ -251,6 +297,13 @@ function StockCountContent() {
              router.replace(`${pathname}?${params.toString()}`);
           }
        }
+       
+       // Handle Saved Date Preference
+       const urlDate = searchParams.get("date");
+       if (!urlDate && user?.lastSelectedDate) {
+           // If no date in URL, but user has saved date, use it
+           updateUrl("date", user.lastSelectedDate);
+       }
       
       setLoading(false);
     };
@@ -260,46 +313,14 @@ function StockCountContent() {
   // Load Transactions and Opening Balances when location or date changes
   useEffect(() => {
     if (selectedLocation && selectedDate) {
-        const loadValues = async () => {
-            try {
-             setLoading(true);
-             const params = new URLSearchParams({
-                date: selectedDate,
-                location: selectedLocation._id,
-              });
-              
-              // Parallel fetch: Previous Balances + Current Transactions
-              const [openingRes, currentRes] = await Promise.all([
-                  fetch(`/api/stock/opening-balance?${params}`),
-                  fetch(`/api/transactions?${params}`)
-              ]);
- 
-              // We need to parse opening balances to a map for easy lookup
-              const openingData = await openingRes.json();
-              const currentData = await currentRes.json();
-              
-              // Store transactions directly if needed, or just use them to build item state
-              setTransactions(currentData); 
+      setLoading(true);
+      findTransactions()
+        .finally(() => setLoading(false));
 
-              // Store opening balances separately? Or better, we need them when rendering items.
-              // For now let's store them in a state to merge later
-              setOpeningBalancesMap(
-                 Array.isArray(openingData) ? 
-                 openingData.reduce((acc: any, curr: any) => ({...acc, [curr.item]: curr}), {}) 
-                 : {}
-              );
-
-            } catch(e) { 
-                console.error(e); 
-            } finally {
-                setLoading(false);
-            }
-        };
-        loadValues();
-        setIsEditMode(false);
-        setEditedValues({});
+      setIsEditMode(false);
+      setEditedValues({});
     }
-  }, [selectedDate, selectedLocation]);
+  }, [findTransactions, selectedDate, selectedLocation]);
 
   const [openingBalancesMap, setOpeningBalancesMap] = useState<any>({});
 
@@ -352,14 +373,63 @@ function StockCountContent() {
   const handleSave = async () => {
     if (!selectedLocation || !selectedDate) return;
 
-    setSaving(true);
+    // 1. Optimistic Update
+    const previousTransactions = [...transactions];
+    const updatedTransactions = [...transactions];
+    
+    // We update local state to reflect changes immediately
+    Object.entries(editedValues).forEach(([itemId, values]) => {
+         const itemOpening = openingBalancesMap[itemId];
+         const openingUnit = itemOpening?.openingBalance || 0;
+         const openingPackage = itemOpening?.openingBalancePackage || 0;
 
+         // Skip empty
+         if (openingUnit === 0 && openingPackage === 0 && values.countedUnit === 0 && values.countedPackage === 0) return;
+         
+         // Find existing transaction in our local list
+         const existingIndex = updatedTransactions.findIndex(t => t.item === itemId);
+         
+         if (existingIndex >= 0) {
+             updatedTransactions[existingIndex] = {
+                 ...updatedTransactions[existingIndex],
+                 countedUnit: values.countedUnit,
+                 countedPackage: values.countedPackage
+             };
+         } else {
+             updatedTransactions.push({
+                 _id: `temp-${itemId}`, // Temporary ID
+                 date: selectedDate,
+                 item: itemId,
+                 location: selectedLocation._id,
+                 countedUnit: values.countedUnit,
+                 countedPackage: values.countedPackage
+             });
+         }
+    });
+
+    setTransactions(updatedTransactions);
+    setIsEditMode(false);
+    setEditedValues({});
+    toast({ 
+        title: "Updates applied", 
+        description: "Syncing with database...",
+    });
+
+    setSaving(true);
     try {
       // Save each edited item as a transaction
-      const savePromises = Object.entries(editedValues).map(([itemId, values]) => {
-        // Calculate consumed values
-        // Consumed = Opening Balance - Count
-        // We need lookup for opening balance
+      const savePromises = Object.entries(editedValues)
+        .filter(([itemId, values]) => {
+           const itemOpening = openingBalancesMap[itemId];
+           const openingUnit = itemOpening?.openingBalance || 0;
+           const openingPackage = itemOpening?.openingBalancePackage || 0;
+
+           if (openingUnit === 0 && openingPackage === 0 && values.countedUnit === 0 && values.countedPackage === 0) {
+               return false;
+           }
+           return true;
+        })
+        .map(([itemId, values]) => {
         const itemOpening = openingBalancesMap[itemId];
         const openingUnit = itemOpening?.openingBalance || 0;
         const openingPackage = itemOpening?.openingBalancePackage || 0;
@@ -384,12 +454,20 @@ function StockCountContent() {
 
       await Promise.all(savePromises);
 
-      // Refresh transactions and exit edit mode
-      await fetchTransactions();
-      setIsEditMode(false);
-      setEditedValues({});
+      // Refresh transactions silently to get real IDs and ensure consistency
+      await findTransactions();
+      
+      toast({ title: "Success", description: "All changes saved successfully." });
+
     } catch (error) {
       console.error("Error saving transactions:", error);
+      // Revert Optimistic Update
+      setTransactions(previousTransactions);
+      toast({ 
+          variant: "destructive", 
+          title: "Save Failed", 
+          description: "Could not save changes. Reverting to previous state." 
+      });
     } finally {
       setSaving(false);
     }
@@ -566,7 +644,11 @@ function StockCountContent() {
             <TableBody>
               {paginatedItems.map((item) => (
                 <TableRow key={item._id}>
-                  <TableCell className="font-medium pl-4">{item.item}</TableCell>
+                  <TableCell className="font-medium pl-4">
+                      <Link href={`/admin/items/${item._id}`} className="hover:underline hover:text-primary">
+                        {item.item}
+                      </Link>
+                  </TableCell>
                   <TableCell className="text-center font-medium text-gray-600 bg-gray-50/30">
                       {item.openingBalanceUnit}
                   </TableCell>
@@ -581,6 +663,7 @@ function StockCountContent() {
                         value={getDisplayValue(item._id, "countedUnit")}
                         onChange={(e) => handleValueChange(item._id, "countedUnit", parseInt(e.target.value) || 0)}
                         className="w-20 mx-auto text-center h-8 border-blue-200 focus-visible:ring-blue-400"
+                        onWheel={(e) => (e.target as HTMLInputElement).blur()}
                       />
                     ) : (
                       <span>{item.countedUnit}</span>
@@ -594,6 +677,7 @@ function StockCountContent() {
                         value={getDisplayValue(item._id, "countedPackage")}
                         onChange={(e) => handleValueChange(item._id, "countedPackage", parseInt(e.target.value) || 0)}
                         className="w-20 mx-auto text-center h-8 border-blue-200 focus-visible:ring-blue-400"
+                        onWheel={(e) => (e.target as HTMLInputElement).blur()}
                       />
                     ) : (
                       <span>{item.countedPackage}</span>

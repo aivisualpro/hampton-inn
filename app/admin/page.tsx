@@ -47,7 +47,7 @@ export default function AdminPage() {
       description: "View transaction history",
       icon: History,
       color: "text-purple-600",
-      image: "", // Placeholder or generate later
+      image: "/bg_transactions.png", // Placeholder or generate later
       href: "/admin/transactions",
     },
     {

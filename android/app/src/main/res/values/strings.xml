@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Hampton Inn</string>
+    <string name="title_activity_main">Hampton Inn</string>
+    <string name="package_name">com.hamptoninn.app</string>
+    <string name="custom_url_scheme">com.hamptoninn.app</string>
+</resources>

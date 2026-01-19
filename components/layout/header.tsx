@@ -103,8 +103,10 @@ export function Header() {
 
   /* Search functionality preserved in state but hidden from UI per request */
   
+  if (pathname === "/login") return null;
+
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 pt-[env(safe-area-inset-top)]">
+    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 pt-[calc(env(safe-area-inset-top)+8px)]">
       <div className="w-full flex h-[5vh] min-h-[40px] items-center px-4">
         {/* Logo and Name: 40% mobile, 20% desktop */}
         <div className="w-[40%] md:w-[20%] flex items-center">

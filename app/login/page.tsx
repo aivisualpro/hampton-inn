@@ -51,7 +51,6 @@ export default function LoginPage() {
             <Image src="/logo.png" alt="Logo" fill sizes="48px" className="object-contain" />
           </div>
           <CardTitle className="text-xl">Hampton Inn</CardTitle>
-          <CardDescription>Enter your email below to login</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleLogin} className="space-y-4">
@@ -60,7 +59,6 @@ export default function LoginPage() {
               <Input
                 id="email"
                 type="email"
-                placeholder="m@example.com"
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}

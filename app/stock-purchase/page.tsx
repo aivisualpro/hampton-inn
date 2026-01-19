@@ -156,60 +156,105 @@ function StockPurchaseContent() {
     setCurrentPage(1);
   }, [searchQuery, selectedLocation]);
 
-  // Fetch user, locations, and items
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const [userRes, locationsRes, itemsRes] = await Promise.all([
-          fetch("/api/auth/me"),
-          fetch("/api/locations"),
-          fetch("/api/items"),
-        ]);
-        
-        const userData = await userRes.json();
-        const locationsData = await locationsRes.json();
-        const itemsData = await itemsRes.json();
-        
-        setCurrentUser(userData);
-        setAllLocations(locationsData);
-        setAllItems(itemsData);
-        
-        const userLocs = locationsData.filter((loc: Location) => 
-          userData.locations?.includes(loc._id)
-        );
-        setUserLocations(userLocs);
-        
-        // Check for saved date preference
-        const urlDate = searchParams.get("date");
-        if (!urlDate && userData.lastSelectedDate) {
-          updateUrl("date", userData.lastSelectedDate);
-        }
-        
-        // Auto-select location
-        const urlLocation = searchParams.get("location");
-        if (urlLocation) {
-          const loc = locationsData.find((l: Location) => l._id === urlLocation);
-          if (loc) setSelectedLocation(loc);
-        } else if (userData.lastSelectedLocation) {
-          const loc = locationsData.find((l: Location) => l._id === userData.lastSelectedLocation);
-          if (loc && userLocs.some((ul: Location) => ul._id === loc._id)) {
-            setSelectedLocation(loc);
-            updateUrl("location", loc._id);
-          }
-        } else if (userLocs.length > 0) {
-          setSelectedLocation(userLocs[0]);
-          updateUrl("location", userLocs[0]._id);
-        }
-        
-      } catch (error) {
-        console.error("Error fetching data:", error);
-      } finally {
-        setLoading(false);
+  // Fetch current user
+  const fetchCurrentUser = async () => {
+    try {
+      const response = await fetch("/api/auth/me");
+      if (response.ok) {
+        const data = await response.json();
+        setCurrentUser(data);
+        return data;
       }
+    } catch (error) {
+      console.error("Error fetching current user:", error);
+    }
+    return null;
+  };
+
+  // Fetch all locations
+  const fetchLocations = async () => {
+    try {
+      const response = await fetch("/api/locations");
+      if (response.ok) {
+        const data = await response.json();
+        setAllLocations(data);
+        return data;
+      }
+    } catch (error) {
+      console.error("Error fetching locations:", error);
+    }
+    return [];
+  };
+
+  // Fetch all items
+  const fetchItems = async () => {
+    try {
+      const response = await fetch("/api/items");
+      if (response.ok) {
+        const data = await response.json();
+        setAllItems(data);
+      }
+    } catch (error) {
+      console.error("Error fetching items:", error);
+    }
+  };
+
+  // Initial data load
+  useEffect(() => {
+    const loadData = async () => {
+      setLoading(true);
+      const [user, locations] = await Promise.all([
+        fetchCurrentUser(),
+        fetchLocations(),
+        fetchItems(),
+      ]);
+      
+      // Filter locations based on user's assigned locations
+      let filteredLocations = locations;
+      if (user && user.locations && user.locations.length > 0) {
+        filteredLocations = locations.filter((loc: Location) => 
+          user.locations.some((userLocIdOrName: string) => 
+            String(userLocIdOrName) === String(loc._id) || 
+            String(userLocIdOrName) === loc.name
+          )
+        );
+      }
+      setUserLocations(filteredLocations);
+
+      // Set initial location:
+      // 1. URL Parameter
+      // 2. User's Last Selected Location (if in allowed list)
+      // 3. First available location
+      const urlLocationId = searchParams.get("location");
+      let initialLocation: Location | undefined;
+
+      if (urlLocationId) {
+        initialLocation = filteredLocations.find((l: Location) => l._id === urlLocationId);
+      } 
+      
+      if (!initialLocation && user?.lastSelectedLocation) {
+        initialLocation = filteredLocations.find((l: Location) => l._id === user.lastSelectedLocation);
+      }
+
+      if (initialLocation) {
+        setSelectedLocation(initialLocation);
+        // Sync URL if it was empty but we found a default
+        if (!urlLocationId) {
+          const params = new URLSearchParams(window.location.search);
+          params.set("location", initialLocation._id);
+          router.replace(`${pathname}?${params.toString()}`);
+        }
+      }
+      
+      // Handle Saved Date Preference
+      const urlDate = searchParams.get("date");
+      if (!urlDate && user?.lastSelectedDate) {
+        updateUrl("date", user.lastSelectedDate);
+      }
+      
+      setLoading(false);
     };
-    
-    fetchData();
+    loadData();
   }, []);
 
   // Items for current location with purchase data
@@ -218,6 +263,10 @@ function StockPurchaseContent() {
   // Fetch purchase data when location or date changes
   useEffect(() => {
     if (!selectedLocation || !selectedDate) return;
+    
+    // Reset edit mode when location or date changes
+    setIsEditMode(false);
+    setEditedValues({});
     
     const fetchPurchaseData = async () => {
       try {

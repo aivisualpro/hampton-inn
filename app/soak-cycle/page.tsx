@@ -381,7 +381,7 @@ function SoakCycleContent() {
               type="date"
               value={dateInputValue}
               onChange={(e) => setDateInputValue(e.target.value)}
-              className="w-[140px] pl-9 h-10"
+              className="w-[130px] pl-8 h-10 text-xs"
               disabled={isEditing}
             />
           </div>

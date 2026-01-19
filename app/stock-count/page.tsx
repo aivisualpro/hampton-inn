@@ -532,7 +532,7 @@ function StockCountContent() {
         <div className="flex gap-2">
           <Button
             variant="outline"
-            className="flex-1 justify-between text-left"
+            className="flex-1 justify-between text-left h-10"
             onClick={() => setIsLocationSelectorOpen(true)}
             disabled={isEditMode}
           >
@@ -579,23 +579,19 @@ function StockCountContent() {
           {selectedLocation && locationItems.length > 0 && (
             <>
               {!isEditMode ? (
-                <Button onClick={handleUpdateStock} className="shrink-0">
-                  <Pencil className="h-4 w-4 mr-2" />
-                  Update Stock
+                <Button onClick={handleUpdateStock} size="icon" className="h-10 w-10 shrink-0">
+                  <Pencil className="h-4 w-4" />
                 </Button>
               ) : (
                 <div className="flex gap-2 shrink-0">
-                  <Button variant="outline" onClick={handleCancel} disabled={saving}>
-                    Cancel
+                  <Button variant="outline" size="icon" className="h-10 w-10" onClick={handleCancel} disabled={saving}>
+                    <ChevronLeft className="h-4 w-4" />
                   </Button>
-                  <Button onClick={handleSave} disabled={saving}>
+                  <Button size="icon" className="h-10 w-10" onClick={handleSave} disabled={saving}>
                     {saving ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      <>
-                        <Save className="h-4 w-4 mr-2" />
-                        Save
-                      </>
+                      <Save className="h-4 w-4" />
                     )}
                   </Button>
                 </div>

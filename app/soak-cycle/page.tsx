@@ -342,189 +342,259 @@ function SoakCycleContent() {
   }
 
   return (
-
-    <div className="h-full flex flex-col overflow-hidden">
-       {/* Header */}
-      <div className="flex-none h-[6%] min-h-[50px] border-b flex items-center justify-between gap-4 px-4 bg-white z-20">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground mr-4">
+    <div className="w-full h-full flex flex-col">
+      {/* Top Controls - Mobile Optimized */}
+      <div className="border-b bg-white px-4 py-3 space-y-3">
+        {/* Breadcrumbs */}
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Link href="/" className="hover:text-primary hover:underline">Home</Link>
           <ChevronRight className="h-4 w-4" />
           <span className="font-medium text-foreground">Soak Cycle</span>
         </div>
 
-        {/* Search Bar */}
-        <div className="relative max-w-sm w-full md:w-64">
-             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-             <Input
-               type="search"
-               placeholder="Search items..."
-               className="w-full bg-background pl-8 h-8 text-sm"
-               value={searchQuery}
-               onChange={(e) => updateUrl("q", e.target.value)}
-              />
+        {/* Row 1: Search (full width on soak cycle since no location selector) */}
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Search..."
+              className="w-full pl-8 h-10"
+              value={searchQuery}
+              onChange={(e) => updateUrl("q", e.target.value)}
+            />
+          </div>
         </div>
-        
 
-            <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-              <Input
-                type="date"
-                value={dateInputValue}
-                onChange={(e) => setDateInputValue(e.target.value)}
-                className="w-auto h-8"
-              />
+        {/* Row 2: Date & Update Button */}
+        <div className="flex gap-2 items-center">
+          <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" onClick={() => {
+            const currentDate = new Date(selectedDate);
+            currentDate.setDate(currentDate.getDate() - 1);
+            updateUrl("date", currentDate.toISOString().split('T')[0]);
+          }} disabled={isEditing}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <div className="relative">
+            <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Input
+              type="date"
+              value={dateInputValue}
+              onChange={(e) => setDateInputValue(e.target.value)}
+              className="w-[140px] pl-9 h-10"
+              disabled={isEditing}
+            />
+          </div>
+          <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" onClick={() => {
+            const currentDate = new Date(selectedDate);
+            currentDate.setDate(currentDate.getDate() + 1);
+            updateUrl("date", currentDate.toISOString().split('T')[0]);
+          }} disabled={isEditing}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          
+          {/* Spacer */}
+          <div className="flex-1" />
+          
+          {/* Action Buttons */}
+          {!isEditing ? (
+            <Button onClick={() => setIsEditing(true)} size="icon" className="h-10 w-10 shrink-0" disabled={loading}>
+              <Edit2 className="h-4 w-4" />
+            </Button>
+          ) : (
+            <div className="flex gap-2 shrink-0">
+              <Button variant="outline" size="icon" className="h-10 w-10" onClick={() => setIsEditing(false)} disabled={saving}>
+                <X className="h-4 w-4" />
+              </Button>
+              <Button size="icon" className="h-10 w-10" onClick={handleSave} disabled={saving}>
+                {saving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+              </Button>
             </div>
-            
-            {isEditing ? (
-                <>
-                     <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => setIsEditing(false)}
-                        disabled={saving}
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                     >
-                        <X className="mr-2 h-4 w-4" />
-                        Cancel
-                    </Button>
-                    <Button size="sm" onClick={handleSave} disabled={saving || loading}>
-                        {saving ? (
-                            <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Saving...
-                            </>
-                        ) : (
-                            <>
-                                <Save className="mr-2 h-4 w-4" />
-                                Save
-                            </>
-                        )}
-                    </Button>
-                </>
-            ) : (
-                <Button size="sm" onClick={() => setIsEditing(true)} disabled={loading}>
-                    <Edit2 className="mr-2 h-4 w-4" />
-                    Update Records
-                </Button>
-            )}
+          )}
         </div>
-
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-hidden relative flex flex-col">
-          <div className="flex-1 overflow-auto bg-white">
-                <Table>
-                    <TableHeader className="bg-white sticky top-0 z-10 shadow-sm">
-                        <TableRow className="hover:bg-muted/50 border-b">
-                            <TableHead className="w-[30%] bg-white pl-4">Items</TableHead>
-                            <TableHead className="text-center bg-gray-100/50">Opening Balance</TableHead>
-                            <TableHead className="text-center bg-yellow-100/50">Soak Cycle</TableHead>
-                            <TableHead className="text-center bg-white">Disposed</TableHead>
-                            <TableHead className="text-center font-bold bg-white">Closing Balance</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {loading && items.length === 0 ? (
-                            <TableRow>
-                                <TableCell colSpan={5} className="h-24 text-center">
-                                    <div className="flex items-center justify-center gap-2">
-                                        <Loader2 className="h-4 w-4 animate-spin" />
-                                        Loading...
-                                    </div>
-                                </TableCell>
-                            </TableRow>
-                        ) : paginatedItems.length === 0 ? (
-                            <TableRow>
-                                <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                                    {(searchQuery ? "No items match your search." : "No items found in Laundry.")}
-                                </TableCell>
-                            </TableRow>
-                        ) : (
-                            paginatedItems.map((item) => (
-                                <TableRow key={item._id} className="hover:bg-muted/50 border-b group">
-                                    <TableCell className="font-medium pl-4">
-                                        <Link href={`/admin/items/${item._id}`} className="hover:underline hover:text-primary">
-                                            {item.item}
-                                        </Link>
-                                    </TableCell>
-                                    <TableCell className="text-center p-1 bg-gray-50/30">
-                                        <div className="w-20 mx-auto text-center h-8 flex items-center justify-center font-medium text-gray-700">
-                                            {item.previousBalance}
-                                        </div>
-                                    </TableCell>
-                                    <TableCell className="text-center p-1 bg-yellow-50/30">
-                                        {isEditing ? (
-                                            <Input
-                                                type="number"
-                                                className="w-20 mx-auto text-center h-8 bg-yellow-100/50 border-yellow-200 focus-visible:ring-yellow-400"
-                                                value={item.soakUnit}
-                                                onChange={(e) => handleValueChange(item._id, "soakUnit", e.target.value)}
-                                                onWheel={(e) => (e.target as HTMLInputElement).blur()}
-                                            />
-                                        ) : (
-                                            <div className="w-20 mx-auto text-center h-8 flex items-center justify-center font-medium">
-                                                {item.soakUnit}
-                                            </div>
-                                        )}
-                                    </TableCell>
-                                    <TableCell className="text-center p-1">
-                                         {isEditing ? (
-                                            <Input
-                                                type="number"
-                                                className="w-20 mx-auto text-center h-8"
-                                                value={item.disposedUnit}
-                                                onChange={(e) => handleValueChange(item._id, "disposedUnit", e.target.value)}
-                                                onWheel={(e) => (e.target as HTMLInputElement).blur()}
-                                            />
-                                         ) : (
-                                            <div className="w-20 mx-auto text-center h-8 flex items-center justify-center font-medium">
-                                                {item.disposedUnit}
-                                            </div>
-                                         )}
-                                    </TableCell>
-                                    <TableCell className="text-center font-bold text-lg">
-                                        {calculateTotal(item)}
-                                    </TableCell>
-                                </TableRow>
-                            ))
-                        )}
-                    </TableBody>
-                </Table>
-           </div>
-           
-            {/* Pagination Controls */}
-            {!loading && filteredItems.length > 0 && (
-              <div className="flex-none flex items-center justify-end space-x-2 p-2 border-t bg-white z-20">
-                <div className="flex-1 text-sm text-muted-foreground">
-                  Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredItems.length)} of {filteredItems.length} entries
-                </div>
-                <div className="space-x-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                    disabled={currentPage === 1}
-                    className="h-8"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                    Previous
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                    disabled={currentPage === totalPages}
-                    className="h-8"
-                  >
-                    Next
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
+      {/* Items List - Card View for Mobile, Table for Desktop */}
+      <div className="flex-1 overflow-auto bg-gray-50 p-4">
+        {loading ? (
+          <div className="space-y-3">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="bg-white rounded-xl shadow-sm border p-4 animate-pulse">
+                <div className="h-6 bg-gray-200 rounded w-1/3 mb-3"></div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="h-16 bg-gray-100 rounded-lg"></div>
+                  <div className="h-16 bg-yellow-50 rounded-lg"></div>
+                  <div className="h-16 bg-gray-100 rounded-lg"></div>
+                  <div className="h-16 bg-green-50 rounded-lg"></div>
                 </div>
               </div>
-            )}
+            ))}
+          </div>
+        ) : paginatedItems.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+            <p className="text-lg font-medium">No Items</p>
+            <p className="text-sm">{searchQuery ? "No items match your search." : "No items found in Laundry."}</p>
+          </div>
+        ) : (
+          <>
+            {/* Mobile Card View */}
+            <div className="md:hidden space-y-3">
+              {paginatedItems.map((item) => (
+                <div key={item._id} className="bg-white rounded-xl shadow-sm border p-4 space-y-3">
+                  {/* Item Name */}
+                  <div className="flex items-center justify-between">
+                    <Link href={`/admin/items/${item._id}`} className="font-semibold text-gray-900 hover:text-primary hover:underline text-lg">
+                      {item.item}
+                    </Link>
+                  </div>
+                  
+                  {/* Values Grid */}
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Opening Balance */}
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="text-xs text-gray-500 mb-1">Opening Balance</p>
+                      <p className="text-lg font-bold text-gray-700">{item.previousBalance}</p>
+                    </div>
+                    
+                    {/* Soak Cycle - Editable */}
+                    <div className="bg-yellow-50 rounded-lg p-3">
+                      <p className="text-xs text-yellow-600 mb-1">Soak Cycle</p>
+                      {isEditing ? (
+                        <Input
+                          type="number"
+                          min="0"
+                          value={item.soakUnit}
+                          onChange={(e) => handleValueChange(item._id, "soakUnit", e.target.value)}
+                          className="h-10 text-lg font-bold text-center border-yellow-200 focus-visible:ring-yellow-400"
+                          onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                        />
+                      ) : (
+                        <p className="text-lg font-bold text-yellow-700">{item.soakUnit}</p>
+                      )}
+                    </div>
+                    
+                    {/* Disposed - Editable */}
+                    <div className="bg-red-50 rounded-lg p-3">
+                      <p className="text-xs text-red-600 mb-1">Disposed</p>
+                      {isEditing ? (
+                        <Input
+                          type="number"
+                          min="0"
+                          value={item.disposedUnit}
+                          onChange={(e) => handleValueChange(item._id, "disposedUnit", e.target.value)}
+                          className="h-10 text-lg font-bold text-center border-red-200 focus-visible:ring-red-400"
+                          onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                        />
+                      ) : (
+                        <p className="text-lg font-bold text-red-700">{item.disposedUnit}</p>
+                      )}
+                    </div>
+                    
+                    {/* Closing Balance */}
+                    <div className="bg-green-50 rounded-lg p-3">
+                      <p className="text-xs text-green-600 mb-1">Closing Balance</p>
+                      <p className="text-lg font-bold text-green-700">{calculateTotal(item)}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden md:block bg-white rounded-lg border shadow-sm">
+              <Table>
+                <TableHeader className="bg-muted/50 sticky top-0">
+                  <TableRow>
+                    <TableHead className="font-semibold pl-4">Item</TableHead>
+                    <TableHead className="font-semibold text-center w-[130px] bg-gray-50/50">Opening</TableHead>
+                    <TableHead className="font-semibold text-center w-[130px] bg-yellow-50/50">Soak Cycle</TableHead>
+                    <TableHead className="font-semibold text-center w-[130px] bg-red-50/50">Disposed</TableHead>
+                    <TableHead className="font-semibold text-center w-[130px] bg-green-50/50">Closing</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paginatedItems.map((item) => (
+                    <TableRow key={item._id}>
+                      <TableCell className="font-medium pl-4">
+                        <Link href={`/admin/items/${item._id}`} className="hover:underline hover:text-primary">
+                          {item.item}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-center font-medium text-gray-600 bg-gray-50/30">
+                        {item.previousBalance}
+                      </TableCell>
+                      <TableCell className="text-center bg-yellow-50/20">
+                        {isEditing ? (
+                          <Input
+                            type="number"
+                            min="0"
+                            value={item.soakUnit}
+                            onChange={(e) => handleValueChange(item._id, "soakUnit", e.target.value)}
+                            className="w-20 mx-auto text-center h-8 border-yellow-200 focus-visible:ring-yellow-400"
+                            onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                          />
+                        ) : (
+                          <span>{item.soakUnit}</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center bg-red-50/20">
+                        {isEditing ? (
+                          <Input
+                            type="number"
+                            min="0"
+                            value={item.disposedUnit}
+                            onChange={(e) => handleValueChange(item._id, "disposedUnit", e.target.value)}
+                            className="w-20 mx-auto text-center h-8 border-red-200 focus-visible:ring-red-400"
+                            onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                          />
+                        ) : (
+                          <span>{item.disposedUnit}</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center font-bold text-green-700 bg-green-50/20">
+                        {calculateTotal(item)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
+        )}
       </div>
+      
+      {/* Pagination Controls */}
+      {!loading && filteredItems.length > 0 && (
+        <div className="flex-none flex items-center justify-between p-3 border-t bg-white">
+          <div className="text-xs text-muted-foreground">
+            {(currentPage - 1) * itemsPerPage + 1}-{Math.min(currentPage * itemsPerPage, filteredItems.length)} of {filteredItems.length}
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              <span className="hidden sm:inline ml-1">Previous</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages}
+            >
+              <span className="hidden sm:inline mr-1">Next</span>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

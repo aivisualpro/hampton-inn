@@ -642,9 +642,6 @@ function StockCountContent() {
                     <Link href={`/admin/items/${item._id}`} className="font-semibold text-gray-900 hover:text-primary hover:underline text-lg">
                       {item.item}
                     </Link>
-                    {item.package && (
-                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">{item.package}</span>
-                    )}
                   </div>
                   
                   {/* Values Grid */}

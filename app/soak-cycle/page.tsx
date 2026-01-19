@@ -31,12 +31,12 @@ type Transaction = {
 
 type SoakCycleItem = Item & {
   previousBalance: number; // Opening balance from previous date
-  soakUnit: number;
-  disposedUnit: number;
+  soakUnit: number | string;
+  disposedUnit: number | string;
 };
 
 const calculateTotal = (item: SoakCycleItem) => {
-    return (item.previousBalance || 0) + (item.soakUnit || 0) - (item.disposedUnit || 0);
+    return (item.previousBalance || 0) + Number(item.soakUnit || 0) - Number(item.disposedUnit || 0);
 };
 
 const sortItems = (a: SoakCycleItem, b: SoakCycleItem) => {
@@ -224,8 +224,8 @@ function SoakCycleContent() {
           ...item,
           previousBalance: 0,
           countedUnit: 0,
-          soakUnit: 0,
-          disposedUnit: 0,
+          soakUnit: "",
+          disposedUnit: "",
         }));
         
         setItems(initializedItems);
@@ -282,8 +282,8 @@ function SoakCycleContent() {
                 return {
                     ...item,
                     previousBalance,
-                    soakUnit,
-                    disposedUnit,
+                    soakUnit: soakUnit === 0 ? "" : soakUnit,
+                    disposedUnit: disposedUnit === 0 ? "" : disposedUnit,
                 };
               }).sort(sortItems));
             } catch(e) { 
@@ -298,9 +298,8 @@ function SoakCycleContent() {
 
 
   const handleValueChange = (id: string, field: keyof SoakCycleItem, value: string) => {
-    const numValue = parseInt(value) || 0;
     setItems(prev => prev.map(item => 
-      item._id === id ? { ...item, [field]: numValue } : item
+      item._id === id ? { ...item, [field]: value } : item
     ));
   };
 
@@ -317,7 +316,9 @@ function SoakCycleContent() {
       // Filter items: Don't add transaction if Soak, Disposed, and Total are all 0
       const itemsToSave = items.filter(item => {
         const total = calculateTotal(item);
-        const hasValue = item.soakUnit !== 0 || item.disposedUnit !== 0 || total !== 0;
+        const soakVal = item.soakUnit === "" ? 0 : Number(item.soakUnit);
+        const disposedVal = item.disposedUnit === "" ? 0 : Number(item.disposedUnit);
+        const hasValue = soakVal !== 0 || disposedVal !== 0 || total !== 0;
         return hasValue;
       });
 
@@ -330,8 +331,8 @@ function SoakCycleContent() {
             location: laundryLocationId,
             item: item._id,
             countedUnit: calculateTotal(item), // calculated Total becomes the new Counted Unit record
-            soakUnit: item.soakUnit,
-            consumedUnit: item.disposedUnit, // Map disposed to consumed
+            soakUnit: item.soakUnit === "" ? 0 : Number(item.soakUnit),
+            consumedUnit: item.disposedUnit === "" ? 0 : Number(item.disposedUnit), // Map disposed to consumed
           }),
         });
       });
@@ -549,7 +550,7 @@ function SoakCycleContent() {
                           onWheel={(e) => (e.target as HTMLInputElement).blur()}
                         />
                       ) : (
-                        <p className="text-lg font-bold text-yellow-700">{item.soakUnit}</p>
+                        <p className="text-lg font-bold text-yellow-700">{item.soakUnit === 0 ? "" : item.soakUnit}</p>
                       )}
                     </div>
                     
@@ -566,7 +567,7 @@ function SoakCycleContent() {
                           onWheel={(e) => (e.target as HTMLInputElement).blur()}
                         />
                       ) : (
-                        <p className="text-lg font-bold text-red-700">{item.disposedUnit}</p>
+                        <p className="text-lg font-bold text-red-700">{item.disposedUnit === 0 ? "" : item.disposedUnit}</p>
                       )}
                     </div>
                     
@@ -614,7 +615,7 @@ function SoakCycleContent() {
                             onWheel={(e) => (e.target as HTMLInputElement).blur()}
                           />
                         ) : (
-                          <span>{item.soakUnit}</span>
+                          <span>{item.soakUnit === 0 ? "" : item.soakUnit}</span>
                         )}
                       </TableCell>
                       <TableCell className="text-center bg-red-50/20">
@@ -628,7 +629,7 @@ function SoakCycleContent() {
                             onWheel={(e) => (e.target as HTMLInputElement).blur()}
                           />
                         ) : (
-                          <span>{item.disposedUnit}</span>
+                          <span>{item.disposedUnit === 0 ? "" : item.disposedUnit}</span>
                         )}
                       </TableCell>
                       <TableCell className="text-center font-bold text-green-700 bg-green-50/20">

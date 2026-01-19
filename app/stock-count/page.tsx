@@ -56,8 +56,8 @@ type ItemWithCount = Item & {
 
 type EditedValues = {
   [itemId: string]: {
-    countedUnit: number;
-    countedPackage: number;
+    countedUnit: number | string;
+    countedPackage: number | string;
   };
 };
 
@@ -397,8 +397,8 @@ function StockCountContent() {
     const initialValues: EditedValues = {};
     locationItems.forEach(item => {
       initialValues[item._id] = {
-        countedUnit: item.countedUnit,
-        countedPackage: item.countedPackage,
+        countedUnit: item.countedUnit === 0 ? "" : item.countedUnit,
+        countedPackage: item.countedPackage === 0 ? "" : item.countedPackage,
       };
     });
     setEditedValues(initialValues);
@@ -409,7 +409,7 @@ function StockCountContent() {
   const handleValueChange = (
     itemId: string,
     field: "countedUnit" | "countedPackage",
-    value: number
+    value: number | string
   ) => {
     setEditedValues(prev => ({
       ...prev,
@@ -433,9 +433,12 @@ function StockCountContent() {
          const itemOpening = openingBalancesMap[itemId];
          const openingUnit = itemOpening?.openingBalance || 0;
          const openingPackage = itemOpening?.openingBalancePackage || 0;
+         
+         const valCountedUnit = values.countedUnit === "" ? 0 : Number(values.countedUnit);
+         const valCountedPackage = values.countedPackage === "" ? 0 : Number(values.countedPackage);
 
          // Skip empty
-         if (openingUnit === 0 && openingPackage === 0 && values.countedUnit === 0 && values.countedPackage === 0) return;
+         if (openingUnit === 0 && openingPackage === 0 && valCountedUnit === 0 && valCountedPackage === 0) return;
          
          // Find existing transaction in our local list
          const existingIndex = updatedTransactions.findIndex(t => t.item === itemId);
@@ -443,8 +446,8 @@ function StockCountContent() {
          if (existingIndex >= 0) {
              updatedTransactions[existingIndex] = {
                  ...updatedTransactions[existingIndex],
-                 countedUnit: values.countedUnit,
-                 countedPackage: values.countedPackage
+                 countedUnit: valCountedUnit,
+                 countedPackage: valCountedPackage
              };
          } else {
              updatedTransactions.push({
@@ -452,8 +455,8 @@ function StockCountContent() {
                  date: selectedDate,
                  item: itemId,
                  location: selectedLocation._id,
-                 countedUnit: values.countedUnit,
-                 countedPackage: values.countedPackage
+                 countedUnit: valCountedUnit,
+                 countedPackage: valCountedPackage
              });
          }
     });
@@ -470,23 +473,20 @@ function StockCountContent() {
     try {
       // Save each edited item as a transaction
       const savePromises = Object.entries(editedValues)
-        .filter(([itemId, values]) => {
+        .map(([itemId, values]) => {
            const itemOpening = openingBalancesMap[itemId];
            const openingUnit = itemOpening?.openingBalance || 0;
            const openingPackage = itemOpening?.openingBalancePackage || 0;
+           
+           const valCountedUnit = values.countedUnit === "" ? 0 : Number(values.countedUnit);
+           const valCountedPackage = values.countedPackage === "" ? 0 : Number(values.countedPackage);
 
-           if (openingUnit === 0 && openingPackage === 0 && values.countedUnit === 0 && values.countedPackage === 0) {
-               return false;
+           if (openingUnit === 0 && openingPackage === 0 && valCountedUnit === 0 && valCountedPackage === 0) {
+               return null;
            }
-           return true;
-        })
-        .map(([itemId, values]) => {
-        const itemOpening = openingBalancesMap[itemId];
-        const openingUnit = itemOpening?.openingBalance || 0;
-        const openingPackage = itemOpening?.openingBalancePackage || 0;
 
-        const consumedUnit = openingUnit - values.countedUnit;
-        const consumedPackage = openingPackage - values.countedPackage;
+        const consumedUnit = openingUnit - valCountedUnit;
+        const consumedPackage = openingPackage - valCountedPackage;
 
         return fetch("/api/transactions", {
           method: "POST",
@@ -495,13 +495,14 @@ function StockCountContent() {
             date: selectedDate,
             item: itemId,
             location: selectedLocation._id,
-            countedUnit: values.countedUnit,
-            countedPackage: values.countedPackage,
+            countedUnit: valCountedUnit,
+            countedPackage: valCountedPackage,
             consumedUnit: consumedUnit,
             consumedPackage: consumedPackage,
           }),
         });
-      });
+      })
+      .filter(p => p !== null) as Promise<Response>[];
 
       await Promise.all(savePromises);
 
@@ -565,7 +566,11 @@ function StockCountContent() {
       return editedValues[itemId][field];
     }
     const item = locationItems.find(i => i._id === itemId);
-    return item ? item[field] : 0;
+    // If not edit mode, also return "" for 0
+    if (item && item[field] !== 0) {
+        return item[field];
+    }
+    return "";
   };
 
   return (
@@ -857,12 +862,12 @@ function StockCountContent() {
                             type="number"
                             min="0"
                             value={getDisplayValue(item._id, "countedUnit")}
-                            onChange={(e) => handleValueChange(item._id, "countedUnit", parseInt(e.target.value) || 0)}
+                            onChange={(e) => handleValueChange(item._id, "countedUnit", e.target.value)}
                             className="w-20 mx-auto text-center h-8 border-blue-200 focus-visible:ring-blue-400"
                             onWheel={(e) => (e.target as HTMLInputElement).blur()}
                           />
                         ) : (
-                          <span>{item.countedUnit}</span>
+                          <span>{item.countedUnit === 0 ? "" : item.countedUnit}</span>
                         )}
                       </TableCell>
                       <TableCell className="text-center bg-blue-50/20">
@@ -871,19 +876,19 @@ function StockCountContent() {
                             type="number"
                             min="0"
                             value={getDisplayValue(item._id, "countedPackage")}
-                            onChange={(e) => handleValueChange(item._id, "countedPackage", parseInt(e.target.value) || 0)}
+                            onChange={(e) => handleValueChange(item._id, "countedPackage", e.target.value)}
                             className="w-20 mx-auto text-center h-8 border-blue-200 focus-visible:ring-blue-400"
                             onWheel={(e) => (e.target as HTMLInputElement).blur()}
                           />
                         ) : (
-                          <span>{item.countedPackage}</span>
+                          <span>{item.countedPackage === 0 ? "" : item.countedPackage}</span>
                         )}
                       </TableCell>
                       <TableCell className="text-center font-medium text-gray-700 bg-green-50/20">
-                        {getDisplayValue(item._id, "countedUnit")}
+                        {getDisplayValue(item._id, "countedUnit") || ""}
                       </TableCell>
                       <TableCell className="text-center font-medium text-gray-700 bg-green-50/20">
-                        {getDisplayValue(item._id, "countedPackage")}
+                        {getDisplayValue(item._id, "countedPackage") || ""}
                       </TableCell>
                     </TableRow>
                   ))}

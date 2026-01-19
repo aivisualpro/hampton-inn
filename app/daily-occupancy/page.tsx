@@ -34,14 +34,14 @@ type Item = {
 
 type ItemWithStats = Item & {
   openingBalanceUnit: number;
-  consumedUnit: number; // Editable
-  purchasedUnit: number; // Editable
+  consumedUnit: number | string; // Editable
+  purchasedUnit: number | string; // Editable
 };
 
 type EditedValues = {
   [itemId: string]: {
-    consumedUnit: number;
-    purchasedUnit: number;
+    consumedUnit: number | string;
+    purchasedUnit: number | string;
   };
 };
 
@@ -230,8 +230,8 @@ function DailyOccupancyContent() {
                 return {
                     ...item,
                     openingBalanceUnit: openingBalances[item._id]?.unit || 0,
-                    consumedUnit: t?.consumedUnit || 0,
-                    purchasedUnit: t?.purchasedUnit || 0
+                    consumedUnit: t?.consumedUnit || "",
+                    purchasedUnit: t?.purchasedUnit || ""
                 };
             });
 
@@ -267,15 +267,15 @@ function DailyOccupancyContent() {
       const initial: EditedValues = {};
       allItems.forEach(i => {
           initial[i._id] = {
-              consumedUnit: i.consumedUnit,
-              purchasedUnit: i.purchasedUnit
+              consumedUnit: i.consumedUnit === 0 ? "" : i.consumedUnit,
+              purchasedUnit: i.purchasedUnit === 0 ? "" : i.purchasedUnit
           };
       });
       setEditedValues(initial);
       setIsEditMode(true);
   };
 
-   const handleValueChange = (itemId: string, field: "consumedUnit" | "purchasedUnit", val: number) => {
+   const handleValueChange = (itemId: string, field: "consumedUnit" | "purchasedUnit", val: number | string) => {
       setEditedValues(prev => ({
           ...prev, 
           [itemId]: { ...prev[itemId], [field]: val }
@@ -288,26 +288,20 @@ function DailyOccupancyContent() {
            if (!kitchenId) throw new Error("No kitchen location found");
 
            const promises = Object.entries(editedValues)
-            .filter(([itemId, val]) => {
-                const item = allItems.find(i => i._id === itemId);
-                const opening = item?.openingBalanceUnit || 0;
-                
-                // Skip if everything is zero
-                if (opening === 0 && val.purchasedUnit === 0 && val.consumedUnit === 0) {
-                    return false;
-                }
-                return true;
-            })
             .map(([itemId, val]) => {
                // Logic:
-               // In Stock Count, we save `counted` and `consumed` is derived or passed.
-               // Here we Edit `consumed` and `purchased`.
-               // We probably need to calculate `counted` (Closing) to maintain consistency for Opening Balance Logic?
-               // Opening Balance Logic looks for `countedUnit`.
                // Closing = Opening + Purchased - Consumed.
                const item = allItems.find(i => i._id === itemId);
                const opening = item?.openingBalanceUnit || 0;
-               const closing = opening + val.purchasedUnit - val.consumedUnit;
+               
+               const valPurchased = val.purchasedUnit === "" ? 0 : Number(val.purchasedUnit);
+               const valConsumed = val.consumedUnit === "" ? 0 : Number(val.consumedUnit);
+               
+               if (opening === 0 && valPurchased === 0 && valConsumed === 0) {
+                   return null;
+               }
+
+               const closing = opening + valPurchased - valConsumed;
 
                return fetch("/api/transactions", {
                    method: "POST",
@@ -316,15 +310,14 @@ function DailyOccupancyContent() {
                        date: selectedDate,
                        item: itemId,
                        location: kitchenId,
-                       consumedUnit: val.consumedUnit,
-                       purchasedUnit: val.purchasedUnit,
-                       countedUnit: closing, // Auto-calculate closing/count
-                       // Packages? User said "editable in units only". So packages unchanged?
-                       // We should probably preserve existing count or 0? 
-                       // Let's assume 0 for package delta if not tracked here.
+                       consumedUnit: valConsumed,
+                       purchasedUnit: valPurchased,
+                       countedUnit: closing
                    })
                });
-           });
+            })
+            .filter(p => p !== null) as Promise<Response>[];
+
            
            await Promise.all(promises);
            await loadData();
@@ -355,7 +348,10 @@ function DailyOccupancyContent() {
    const getDisplayVal = (itemId: string, field: "consumedUnit" | "purchasedUnit") => {
        if (isEditMode && editedValues[itemId]) return editedValues[itemId][field];
        const item = allItems.find(i => i._id === itemId);
-       return item ? item[field] : 0;
+       if (item && item[field] !== 0) {
+            return item[field];
+       }
+       return "";
    }
 
    return (
@@ -553,7 +549,7 @@ function DailyOccupancyContent() {
                 const opening = item.openingBalanceUnit;
                 const purchase = getDisplayVal(item._id, "purchasedUnit");
                 const consumed = getDisplayVal(item._id, "consumedUnit");
-                const closing = opening + purchase - consumed;
+                const closing = opening + Number(purchase || 0) - Number(consumed || 0);
                 
                 return (
                   <div key={item._id} className="bg-white rounded-xl shadow-sm border p-4 space-y-3">
@@ -586,12 +582,12 @@ function DailyOccupancyContent() {
                             type="number"
                             min="0"
                             value={purchase}
-                            onChange={(e) => handleValueChange(item._id, "purchasedUnit", parseInt(e.target.value) || 0)}
+                            onChange={(e) => handleValueChange(item._id, "purchasedUnit", e.target.value)}
                             className="h-10 text-lg font-bold text-center border-blue-200 focus-visible:ring-blue-400"
                             onWheel={(e) => (e.target as HTMLInputElement).blur()}
                           />
                         ) : (
-                          <p className="text-lg font-bold text-blue-700">{purchase}</p>
+                          <p className="text-lg font-bold text-blue-700">{purchase === 0 ? "" : purchase}</p>
                         )}
                       </div>
                       
@@ -603,12 +599,12 @@ function DailyOccupancyContent() {
                             type="number"
                             min="0"
                             value={consumed}
-                            onChange={(e) => handleValueChange(item._id, "consumedUnit", parseInt(e.target.value) || 0)}
+                            onChange={(e) => handleValueChange(item._id, "consumedUnit", e.target.value)}
                             className="h-10 text-lg font-bold text-center border-orange-200 focus-visible:ring-orange-400"
                             onWheel={(e) => (e.target as HTMLInputElement).blur()}
                           />
                         ) : (
-                          <p className="text-lg font-bold text-orange-700">{consumed}</p>
+                          <p className="text-lg font-bold text-orange-700">{consumed === 0 ? "" : consumed}</p>
                         )}
                       </div>
                       
@@ -641,7 +637,7 @@ function DailyOccupancyContent() {
                     const opening = item.openingBalanceUnit;
                     const purchase = getDisplayVal(item._id, "purchasedUnit");
                     const consumed = getDisplayVal(item._id, "consumedUnit");
-                    const closing = opening + purchase - consumed;
+                    const closing = opening + Number(purchase || 0) - Number(consumed || 0);
                     
                     const prevItem = index > 0 ? paginatedItems[index - 1] : null;
                     const showHeader = !prevItem || item.subCategory !== prevItem.subCategory;
@@ -675,12 +671,12 @@ function DailyOccupancyContent() {
                                 type="number"
                                 min="0"
                                 value={purchase}
-                                onChange={(e) => handleValueChange(item._id, "purchasedUnit", parseInt(e.target.value) || 0)}
+                                onChange={(e) => handleValueChange(item._id, "purchasedUnit", e.target.value)}
                                 className="w-16 mx-auto text-center h-8 border-blue-200 focus-visible:ring-blue-400"
                                 onWheel={(e) => (e.target as HTMLInputElement).blur()}
                               />
                             ) : (
-                              <span>{purchase}</span>
+                              <span>{purchase === 0 ? "" : purchase}</span>
                             )}
                           </TableCell>
                           <TableCell className="text-center bg-orange-50/20">
@@ -689,12 +685,12 @@ function DailyOccupancyContent() {
                                 type="number"
                                 min="0"
                                 value={consumed}
-                                onChange={(e) => handleValueChange(item._id, "consumedUnit", parseInt(e.target.value) || 0)}
+                                onChange={(e) => handleValueChange(item._id, "consumedUnit", e.target.value)}
                                 className="w-16 mx-auto text-center h-8 border-orange-200 focus-visible:ring-orange-400"
                                 onWheel={(e) => (e.target as HTMLInputElement).blur()}
                               />
                             ) : (
-                              <span>{consumed}</span>
+                              <span>{consumed === 0 ? "" : consumed}</span>
                             )}
                           </TableCell>
                           <TableCell className="text-center font-bold text-green-700 bg-green-50/20">

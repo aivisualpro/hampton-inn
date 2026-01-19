@@ -46,8 +46,8 @@ type ItemWithPurchase = Item & {
 
 type EditedValues = {
   [itemId: string]: {
-    purchasedUnit: number;
-    purchasedPackage: number;
+    purchasedUnit: number | string;
+    purchasedPackage: number | string;
   };
 };
 
@@ -371,15 +371,15 @@ function StockPurchaseContent() {
     const initial: EditedValues = {};
     locationItems.forEach(item => {
       initial[item._id] = {
-        purchasedUnit: item.purchasedUnit,
-        purchasedPackage: item.purchasedPackage,
+        purchasedUnit: item.purchasedUnit === 0 ? "" : item.purchasedUnit,
+        purchasedPackage: item.purchasedPackage === 0 ? "" : item.purchasedPackage,
       };
     });
     setEditedValues(initial);
     setIsEditMode(true);
   };
 
-  const handleValueChange = (itemId: string, field: "purchasedUnit" | "purchasedPackage", value: number) => {
+  const handleValueChange = (itemId: string, field: "purchasedUnit" | "purchasedPackage", value: number | string) => {
     setEditedValues(prev => ({
       ...prev,
       [itemId]: { ...prev[itemId], [field]: value }
@@ -391,7 +391,13 @@ function StockPurchaseContent() {
       return editedValues[itemId][field];
     }
     const item = locationItems.find(i => i._id === itemId);
-    return item ? item[field] : 0;
+    // deleted duplicate line
+
+    // If not edit mode, return "" for 0
+    if (item && item[field] !== 0) {
+        return item[field];
+    }
+    return "";
   };
 
   const handleCancel = () => {
@@ -409,7 +415,11 @@ function StockPurchaseContent() {
         const opening = item?.openingBalanceUnit || 0;
         const openingPkg = item?.openingBalancePackage || 0;
         
-        if (opening === 0 && openingPkg === 0 && val.purchasedUnit === 0 && val.purchasedPackage === 0) {
+        // Check values as string "" or 0
+        const isUnitEmpty = val.purchasedUnit === 0 || val.purchasedUnit === "";
+        const isPkgEmpty = val.purchasedPackage === 0 || val.purchasedPackage === "";
+
+        if (opening === 0 && openingPkg === 0 && isUnitEmpty && isPkgEmpty) {
           return false;
         }
         return true;
@@ -420,9 +430,12 @@ function StockPurchaseContent() {
         const openingUnit = item?.openingBalanceUnit || 0;
         const openingPkg = item?.openingBalancePackage || 0;
         
+        const valPurchasedUnit = val.purchasedUnit === "" ? 0 : Number(val.purchasedUnit);
+        const valPurchasedPackage = val.purchasedPackage === "" ? 0 : Number(val.purchasedPackage);
+        
         // Closing = Opening + Purchased
-        const closingUnit = openingUnit + val.purchasedUnit;
-        const closingPkg = openingPkg + val.purchasedPackage;
+        const closingUnit = openingUnit + valPurchasedUnit;
+        const closingPkg = openingPkg + valPurchasedPackage;
         
         return fetch("/api/transactions", {
           method: "POST",
@@ -431,8 +444,8 @@ function StockPurchaseContent() {
             date: selectedDate,
             item: itemId,
             location: selectedLocation._id,
-            purchasedUnit: val.purchasedUnit,
-            purchasedPackage: val.purchasedPackage,
+            purchasedUnit: valPurchasedUnit,
+            purchasedPackage: valPurchasedPackage,
             countedUnit: closingUnit,
             countedPackage: closingPkg,
           }),
@@ -672,8 +685,8 @@ function StockPurchaseContent() {
               {paginatedItems.map((item) => {
                 const purchasedUnit = getDisplayValue(item._id, "purchasedUnit");
                 const purchasedPackage = getDisplayValue(item._id, "purchasedPackage");
-                const closingUnit = item.openingBalanceUnit + purchasedUnit;
-                const closingPackage = item.openingBalancePackage + purchasedPackage;
+                const closingUnit = item.openingBalanceUnit + Number(purchasedUnit || 0);
+                const closingPackage = item.openingBalancePackage + Number(purchasedPackage || 0);
                 
                 return (
                   <div key={item._id} className="bg-white rounded-xl shadow-sm border p-4 space-y-3">
@@ -711,12 +724,12 @@ function StockPurchaseContent() {
                             type="number"
                             min="0"
                             value={purchasedUnit}
-                            onChange={(e) => handleValueChange(item._id, "purchasedUnit", parseInt(e.target.value) || 0)}
+                            onChange={(e) => handleValueChange(item._id, "purchasedUnit", e.target.value)}
                             className="h-8 text-sm font-bold text-center border-blue-200 focus-visible:ring-blue-400"
                             onWheel={(e) => (e.target as HTMLInputElement).blur()}
                           />
                         ) : (
-                          <p className="text-sm font-bold text-blue-700 text-center py-1">{purchasedUnit}</p>
+                          <p className="text-sm font-bold text-blue-700 text-center py-1">{purchasedUnit === 0 ? "" : purchasedUnit}</p>
                         )}
                       </div>
                       <div className="bg-blue-50 rounded-lg p-1">
@@ -725,12 +738,12 @@ function StockPurchaseContent() {
                             type="number"
                             min="0"
                             value={purchasedPackage}
-                            onChange={(e) => handleValueChange(item._id, "purchasedPackage", parseInt(e.target.value) || 0)}
+                            onChange={(e) => handleValueChange(item._id, "purchasedPackage", e.target.value)}
                             className="h-8 text-sm font-bold text-center border-blue-200 focus-visible:ring-blue-400"
                             onWheel={(e) => (e.target as HTMLInputElement).blur()}
                           />
                         ) : (
-                          <p className="text-sm font-bold text-blue-700 text-center py-1">{purchasedPackage}</p>
+                          <p className="text-sm font-bold text-blue-700 text-center py-1">{purchasedPackage === 0 ? "" : purchasedPackage}</p>
                         )}
                       </div>
                     </div>
@@ -768,8 +781,8 @@ function StockPurchaseContent() {
                   {paginatedItems.map((item) => {
                     const purchasedUnit = getDisplayValue(item._id, "purchasedUnit");
                     const purchasedPackage = getDisplayValue(item._id, "purchasedPackage");
-                    const closingUnit = item.openingBalanceUnit + purchasedUnit;
-                    const closingPackage = item.openingBalancePackage + purchasedPackage;
+                    const closingUnit = item.openingBalanceUnit + Number(purchasedUnit || 0);
+                    const closingPackage = item.openingBalancePackage + Number(purchasedPackage || 0);
                     
                     return (
                       <TableRow key={item._id}>
@@ -790,12 +803,12 @@ function StockPurchaseContent() {
                               type="number"
                               min="0"
                               value={purchasedUnit}
-                              onChange={(e) => handleValueChange(item._id, "purchasedUnit", parseInt(e.target.value) || 0)}
+                              onChange={(e) => handleValueChange(item._id, "purchasedUnit", e.target.value)}
                               className="w-16 mx-auto text-center h-8 border-blue-200 focus-visible:ring-blue-400"
                               onWheel={(e) => (e.target as HTMLInputElement).blur()}
                             />
                           ) : (
-                            <span>{purchasedUnit}</span>
+                            <span>{purchasedUnit === 0 ? "" : purchasedUnit}</span>
                           )}
                         </TableCell>
                         <TableCell className="text-center bg-blue-50/20">
@@ -804,12 +817,12 @@ function StockPurchaseContent() {
                               type="number"
                               min="0"
                               value={purchasedPackage}
-                              onChange={(e) => handleValueChange(item._id, "purchasedPackage", parseInt(e.target.value) || 0)}
+                              onChange={(e) => handleValueChange(item._id, "purchasedPackage", e.target.value)}
                               className="w-16 mx-auto text-center h-8 border-blue-200 focus-visible:ring-blue-400"
                               onWheel={(e) => (e.target as HTMLInputElement).blur()}
                             />
                           ) : (
-                            <span>{purchasedPackage}</span>
+                            <span>{purchasedPackage === 0 ? "" : purchasedPackage}</span>
                           )}
                         </TableCell>
                         <TableCell className="text-center font-bold text-green-700 bg-green-50/20">

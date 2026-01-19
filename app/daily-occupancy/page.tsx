@@ -45,6 +45,31 @@ type EditedValues = {
   };
 };
 
+// LocalStorage keys
+const STORAGE_KEYS = {
+  LAST_DATE: "hampton_last_date",
+};
+
+// Helper to read from localStorage (instant, no async)
+const readFromStorage = (key: string): string | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+
+// Helper to write to localStorage
+const writeToStorage = (key: string, value: string): void => {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(key, value);
+  } catch (e) {
+    console.warn("Failed to write to localStorage:", e);
+  }
+};
+
 function DailyOccupancyContent() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -64,6 +89,11 @@ function DailyOccupancyContent() {
   const getDateFromUrl = () => {
     const paramDate = searchParams.get("date");
     if (paramDate) return paramDate;
+    
+    // Check localStorage first for instant loading
+    const cachedDate = readFromStorage(STORAGE_KEYS.LAST_DATE);
+    if (cachedDate) return cachedDate;
+
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -91,16 +121,16 @@ function DailyOccupancyContent() {
       router.replace(`${pathname}?${params.toString()}`);
   };
 
-  const saveDatePreference = async (dateStr: string) => {
-      try {
-          await fetch("/api/auth/me", {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ lastSelectedDate: dateStr })
-          });
-      } catch(e) {
-         console.error("Failed to save date preference", e);
-      }
+  const saveDatePreference = (dateStr: string) => {
+      // Write to localStorage IMMEDIATELY
+      writeToStorage(STORAGE_KEYS.LAST_DATE, dateStr);
+
+      // Sync to server (async, non-blocking)
+      fetch("/api/auth/me", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ lastSelectedDate: dateStr })
+      }).catch(e => console.error("Failed to save date preference", e));
   };
 
   const handleDateInput = (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRef } from "react";
-import { Loader2, ChevronRight, Search, Pencil, Trash2, MoreHorizontal, Calendar as CalendarIcon, Filter, X, Save } from "lucide-react";
+import { Loader2, ChevronRight, Search, Pencil, Trash2, MoreHorizontal, Calendar as CalendarIcon, Filter, X, Save, Box, Circle } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -63,9 +63,13 @@ type Transaction = {
   item: string; // ID
   location: string; // ID
   countedUnit: number; // Closing Count
+  countedPackage?: number;
   soakUnit: number;
+  soakPackage?: number;
   consumedUnit: number;
+  consumedPackage?: number;
   purchasedUnit?: number;
+  purchasedPackage?: number;
   createdAt: string;
   relatedParentItem?: string;
 };
@@ -568,89 +572,119 @@ export default function TransactionsPage() {
 
             <div className="md:hidden p-2 space-y-2">
                 {displayedTransactions.map(t => {
-                     // Merge mass edit values
-                     const overrides = massEditedTransactions[t._id] || {};
-                     const currentT = { ...t, ...overrides };
-                     
-                     // Recalculate opening for display based on current values?
-                     // Logic: Opening = Closing(Counted) - Purch - Soak + Consumed
-                     // But strictly, Opening is fixed from prev day. 
-                     // Let's just use original opening calculation for now or user edit consistency?
-                     // Ideally we just show values. 
-                     const opening = (t.countedUnit || 0) - (t.purchasedUnit || 0) - (t.soakUnit || 0) + (t.consumedUnit || 0); 
-                     
-                     return (
-                        <div key={t._id} className="bg-white border rounded-lg p-3 shadow-sm text-xs relative">
-                            {/* Selection Checkbox Mobile? Maybe skip for density, or add top right */}
-                            {!isMassEditMode && (
-                                <div className="absolute top-3 right-3 flex gap-2">
-                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleEditClick(t)}>
-                                        <Pencil className="h-3 w-3" />
-                                    </Button>
-                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-red-600" onClick={() => handleDeleteClick(t._id)}>
-                                        <Trash2 className="h-3 w-3" />
-                                    </Button>
-                                </div>
-                            )}
+  const overrides = massEditedTransactions[t._id] || {};
+  const currentT = { ...t, ...overrides };
+  
+  // Calculate Opening Balance (Units & Packages)
+  const openingUnit = (t.countedUnit || 0) - (t.purchasedUnit || 0) - (t.soakUnit || 0) + (t.consumedUnit || 0);
+  const openingPackage = (t.countedPackage || 0) - (t.purchasedPackage || 0) - (t.soakPackage || 0) + (t.consumedPackage || 0);
+  
+  const purchSoakUnit = (currentT.purchasedUnit || 0) + (currentT.soakUnit || 0);
+  const purchSoakPackage = (currentT.purchasedPackage || 0) + (currentT.soakPackage || 0);
+  
+  const renderStockValue = (pkg: number = 0, unit: number = 0, isEdit: boolean, fieldPkg: keyof Transaction, fieldUnit: keyof Transaction, id: string) => {
+      if (isEdit) {
+          return (
+              <div className="flex flex-col gap-1 items-center">
+                   <div className="relative">
+                      <Box className="absolute left-1 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground opacity-50" />
+                      <Input 
+                        className="h-6 w-16 pl-5 text-center text-[10px]" 
+                        placeholder="P"
+                        value={currentT[fieldPkg] as number ?? 0}
+                        onChange={(e) => handleMassEditChange(id, fieldPkg, parseInt(e.target.value)||0)}
+                    />
+                   </div>
+                   <div className="relative">
+                      <Circle className="absolute left-1 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground opacity-50" />
+                      <Input 
+                        className="h-6 w-16 pl-5 text-center text-[10px]" 
+                        placeholder="U"
+                        value={currentT[fieldUnit] as number ?? 0}
+                        onChange={(e) => handleMassEditChange(id, fieldUnit, parseInt(e.target.value)||0)}
+                    />
+                   </div>
+              </div>
+          );
+      }
+      return (
+          <div className="flex flex-col items-center justify-center gap-0.5 text-[10px]">
+               <div className="flex items-center gap-1">
+                   <Box className="h-3 w-3 text-gray-400" />
+                   <span className="font-mono font-medium">{pkg}</span>
+               </div>
+               <div className="w-8 h-[1px] bg-gray-100" />
+               <div className="flex items-center gap-1">
+                   <Circle className="h-3 w-3 text-gray-300" />
+                   <span className="font-mono text-gray-600">{unit}</span>
+               </div>
+          </div>
+      );
+  };
 
-                            <div className="pr-16 mb-2">
-                                <div className="font-semibold text-sm">{items[t.item] || t.item}</div>
-                                <div className="text-muted-foreground">{format(new Date(t.date), "MMM d, yyyy")} • {locations[t.location] || t.location}</div>
-                            </div>
-                            
-                            <div className="grid grid-cols-4 gap-1 text-center bg-gray-50 rounded p-2">
-                                <div>
-                                    <div className="text-[10px] text-gray-500">Open</div>
-                                    <div className="font-mono">{opening}</div>
-                                </div>
-                                <div className="text-blue-600">
-                                    <div className="text-[10px] text-blue-400">P/S</div>
-                                    {isMassEditMode ? (
-                                        <div className="flex flex-col gap-1">
-                                            <Input 
-                                                className="h-6 text-[10px] px-1 text-center" 
-                                                placeholder="P"
-                                                value={currentT.purchasedUnit}
-                                                onChange={(e) => handleMassEditChange(t._id, "purchasedUnit", parseInt(e.target.value)||0)}
-                                            />
-                                            <Input 
-                                                className="h-6 text-[10px] px-1 text-center" 
-                                                placeholder="S"
-                                                value={currentT.soakUnit}
-                                                onChange={(e) => handleMassEditChange(t._id, "soakUnit", parseInt(e.target.value)||0)}
-                                            />
-                                        </div>
-                                    ) : (
-                                        <div className="font-mono">{(currentT.purchasedUnit||0)+(currentT.soakUnit||0) || "-"}</div>
-                                    )}
-                                </div>
-                                <div className="text-red-600">
-                                    <div className="text-[10px] text-red-400">C/D</div>
-                                    {isMassEditMode ? (
-                                        <Input 
-                                            className="h-6 text-[10px] px-1 text-center" 
-                                            value={currentT.consumedUnit}
-                                            onChange={(e) => handleMassEditChange(t._id, "consumedUnit", parseInt(e.target.value)||0)}
-                                        />
-                                    ) : (
-                                        <div className="font-mono">{currentT.consumedUnit || "-"}</div>
-                                    )}
-                                </div>
-                                <div className="font-bold">
-                                    <div className="text-[10px] text-gray-500">Close</div>
-                                    {isMassEditMode ? (
-                                        <Input 
-                                            className="h-6 text-[10px] px-1 text-center font-bold" 
-                                            value={currentT.countedUnit}
-                                            onChange={(e) => handleMassEditChange(t._id, "countedUnit", parseInt(e.target.value)||0)}
-                                        />
-                                    ) : (
-                                        <div className="font-mono">{currentT.countedUnit}</div>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                     );
+  return (
+     <div key={t._id} className="bg-white border rounded-lg p-3 shadow-sm text-xs relative">
+         {/* Edit/Delete Actions */}
+         {!isMassEditMode && (
+             <div className="absolute top-3 right-3 flex gap-2">
+                 <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleEditClick(t)}>
+                     <Pencil className="h-3 w-3" />
+                 </Button>
+                 <Button variant="ghost" size="icon" className="h-6 w-6 text-red-600" onClick={() => handleDeleteClick(t._id)}>
+                     <Trash2 className="h-3 w-3" />
+                 </Button>
+             </div>
+         )}
+         
+         <div className="pr-16 mb-2">
+             <div className="font-semibold text-sm">{items[t.item] || t.item}</div>
+             <div className="text-muted-foreground flex items-center gap-1">
+                 {isMassEditMode ? (
+                     <Input 
+                        type="date" 
+                        className="h-6 w-32 text-xs"
+                        value={currentT.date ? format(new Date(currentT.date), "yyyy-MM-dd") : ""}
+                        onChange={(e) => handleMassEditChange(t._id, "date", e.target.value)}
+                     /> 
+                 ) : (
+                    <>
+                        {format(new Date(t.date), "MMM d, yyyy")} • {locations[t.location] || t.location}
+                    </>
+                 )}
+             </div>
+         </div>
+         
+         <div className="grid grid-cols-4 gap-1 text-center bg-gray-50 rounded p-2">
+             <div className="flex flex-col justify-center items-center">
+                 <div className="text-[10px] text-gray-500 mb-1">Open</div>
+                 {/* Opening is generic display, no edit */}
+                 <div className="flex flex-col items-center gap-0.5 text-[10px]">
+                     <div className="flex items-center gap-1 opacity-70">
+                         <Box className="h-2.5 w-2.5" /> {openingPackage}
+                     </div>
+                     <div className="flex items-center gap-1 opacity-70">
+                         <Circle className="h-2.5 w-2.5" /> {openingUnit}
+                     </div>
+                 </div>
+             </div>
+             
+             <div className="text-blue-600 flex flex-col items-center">
+                 <div className="text-[10px] text-blue-400 mb-1">P/S</div>
+                 {renderStockValue(purchSoakPackage, purchSoakUnit, isMassEditMode, "purchasedPackage", "purchasedUnit", t._id)}
+             </div>
+             
+             <div className="text-red-600 flex flex-col items-center">
+                 <div className="text-[10px] text-red-400 mb-1">C/D</div>
+                 {renderStockValue(currentT.consumedPackage, currentT.consumedUnit, isMassEditMode, "consumedPackage", "consumedUnit", t._id)}
+             </div>
+             
+             <div className="font-bold flex flex-col items-center">
+                 <div className="text-[10px] text-gray-500 mb-1">Close</div>
+                 {renderStockValue(currentT.countedPackage, currentT.countedUnit, isMassEditMode, "countedPackage", "countedUnit", t._id)}
+             </div>
+         </div>
+     </div>
+  );
                 })}
 
 
@@ -702,8 +736,52 @@ export default function TransactionsPage() {
                                 const overrides = massEditedTransactions[t._id] || {};
                                 const currentT = { ...t, ...overrides };
                                 
-                                const opening = (t.countedUnit || 0) - (t.purchasedUnit || 0) - (t.soakUnit || 0) + (t.consumedUnit || 0);
-                                const purchSoak = (currentT.purchasedUnit || 0) + (currentT.soakUnit || 0);
+                                const openingUnit = (t.countedUnit || 0) - (t.purchasedUnit || 0) - (t.soakUnit || 0) + (t.consumedUnit || 0);
+                                const openingPackage = (t.countedPackage || 0) - (t.purchasedPackage || 0) - (t.soakPackage || 0) + (t.consumedPackage || 0);
+
+                                const purchSoakUnit = (currentT.purchasedUnit || 0) + (currentT.soakUnit || 0);
+                                const purchSoakPackage = (currentT.purchasedPackage || 0) + (currentT.soakPackage || 0);
+
+                                // Helper for Cell Rendering (reused concept)
+                                const CellDisplay = ({ pkg, unit, fieldPkg, fieldUnit, isEdit }: any) => {
+                                    if (isEdit && fieldPkg && fieldUnit) {
+                                         return (
+                                            <div className="flex flex-col gap-1 items-center">
+                                                <div className="relative">
+                                                     <Box className="absolute left-1 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground opacity-50" />
+                                                     <Input 
+                                                       className="h-6 w-14 pl-4 text-center text-[10px]" 
+                                                       placeholder="P"
+                                                       value={currentT[fieldPkg] as number ?? 0}
+                                                       onChange={(e) => handleMassEditChange(t._id, fieldPkg, parseInt(e.target.value)||0)}
+                                                     />
+                                                </div>
+                                                <div className="relative">
+                                                     <Circle className="absolute left-1 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground opacity-50" />
+                                                     <Input 
+                                                       className="h-6 w-14 pl-4 text-center text-[10px]" 
+                                                       placeholder="U"
+                                                       value={currentT[fieldUnit] as number ?? 0}
+                                                       onChange={(e) => handleMassEditChange(t._id, fieldUnit, parseInt(e.target.value)||0)}
+                                                     />
+                                                </div>
+                                            </div>
+                                         );
+                                    }
+                                    return (
+                                        <div className="flex flex-col items-center justify-center gap-0.5 text-[10px]">
+                                             <div className="flex items-center gap-1">
+                                                 <Box className="h-3 w-3 text-gray-400" />
+                                                 <span className="font-mono font-medium">{pkg || 0}</span>
+                                             </div>
+                                             {/* Divider? <div className="w-6 h-[1px] bg-gray-100" /> */}
+                                             <div className="flex items-center gap-1">
+                                                 <Circle className="h-3 w-3 text-gray-300" />
+                                                 <span className="font-mono text-gray-600">{unit || 0}</span>
+                                             </div>
+                                        </div>
+                                    );
+                                };
 
                                 return (
                                 <TableRow key={t._id} className="hover:bg-muted/50 border-b">
@@ -726,7 +804,14 @@ export default function TransactionsPage() {
                                         })()}
                                     </TableCell>
                                     <TableCell className="pl-4 font-medium text-xs whitespace-nowrap">
-                                        {format(new Date(t.date), "MMM d, yyyy")}
+                                        {isMassEditMode ? (
+                                            <Input 
+                                                type="date" 
+                                                className="h-7 w-32 text-xs"
+                                                value={currentT.date ? format(new Date(currentT.date), "yyyy-MM-dd") : ""}
+                                                onChange={(e) => handleMassEditChange(t._id, "date", e.target.value)}
+                                            />
+                                        ) : format(new Date(t.date), "MMM d, yyyy")}
                                     </TableCell>
                                     <TableCell className="text-xs">
                                         {locations[t.location] || t.location}
@@ -742,51 +827,26 @@ export default function TransactionsPage() {
                                         </div>
                                     </TableCell>
                                     <TableCell className="text-center font-mono text-xs bg-gray-50/50 text-gray-600">
-                                        {opening}
+                                        <CellDisplay pkg={openingPackage} unit={openingUnit} />
                                     </TableCell>
                                     <TableCell className="text-center font-mono text-xs">
-                                        {isMassEditMode ? (
-                                            <Input 
-                                                className="h-7 w-16 mx-auto text-center" 
-                                                value={currentT.countedUnit}
-                                                onChange={(e) => handleMassEditChange(t._id, "countedUnit", parseInt(e.target.value)||0)}
-                                            />
-                                        ) : t.countedUnit}
+                                        <CellDisplay pkg={currentT.countedPackage} unit={currentT.countedUnit} isEdit={isMassEditMode} fieldPkg="countedPackage" fieldUnit="countedUnit" />
                                     </TableCell>
                                     <TableCell className="text-center font-mono text-xs text-red-600">
-                                         {isMassEditMode ? (
-                                            <Input 
-                                                className="h-7 w-16 mx-auto text-center" 
-                                                value={currentT.consumedUnit}
-                                                onChange={(e) => handleMassEditChange(t._id, "consumedUnit", parseInt(e.target.value)||0)}
-                                            />
-                                        ) : (t.consumedUnit > 0 ? t.consumedUnit : "-")}
+                                        <CellDisplay pkg={currentT.consumedPackage} unit={currentT.consumedUnit} isEdit={isMassEditMode} fieldPkg="consumedPackage" fieldUnit="consumedUnit" />
                                     </TableCell>
                                     <TableCell className="text-center font-mono text-xs text-blue-600">
-                                         {isMassEditMode ? (
-                                             <div className="flex flex-col gap-1 items-center">
-                                                <Input 
-                                                    className="h-7 w-16 text-center placeholder:text-gray-300" 
-                                                    placeholder="Buy"
-                                                    title="Purchased"
-                                                    value={currentT.purchasedUnit}
-                                                    onChange={(e) => handleMassEditChange(t._id, "purchasedUnit", parseInt(e.target.value)||0)}
-                                                />
-                                                <Input 
-                                                    className="h-7 w-16 text-center placeholder:text-gray-300" 
-                                                    placeholder="Soak"
-                                                    title="Soak"
-                                                    value={currentT.soakUnit}
-                                                    onChange={(e) => handleMassEditChange(t._id, "soakUnit", parseInt(e.target.value)||0)}
-                                                />
-                                             </div>
-                                        ) : (purchSoak > 0 ? purchSoak : "-")}
+                                        {/* Simplified Purchase/Soak Edit - strictly Purchase in this view or hybrid logic? 
+                                            User has separate fields. We likely assume Purchase for now in this quick edit view 
+                                            or need 4 inputs? 4 inputs is too much. 
+                                            Edit modifies 'purchased'. If soak needed, use details. */}
+                                        <CellDisplay pkg={purchSoakPackage} unit={purchSoakUnit} isEdit={isMassEditMode} fieldPkg="purchasedPackage" fieldUnit="purchasedUnit" />
                                     </TableCell>
                                     <TableCell className="text-center font-mono text-xs font-bold bg-gray-50/50">
-                                        {currentT.countedUnit}
+                                        <CellDisplay pkg={currentT.countedPackage} unit={currentT.countedUnit} />
                                     </TableCell>
                                     <TableCell className="text-center font-mono text-xs font-bold text-green-700 bg-green-50/50">
-                                        {totalStockMap[t.item]?.totalUnit || 0}
+                                        <CellDisplay pkg={totalStockMap[t.item]?.totalPackage} unit={totalStockMap[t.item]?.totalUnit} />
                                     </TableCell>
                                     <TableCell>
                                         {!isMassEditMode && (

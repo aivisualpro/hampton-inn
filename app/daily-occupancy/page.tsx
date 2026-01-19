@@ -338,172 +338,311 @@ function DailyOccupancyContent() {
 
    return (
     <div className="w-full h-full flex flex-col">
-       {/* Top Bar */}
-      <div className="border-b bg-white px-4 py-3 flex flex-wrap gap-3 items-center">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground mr-4">
+      {/* Top Controls - Mobile Optimized */}
+      <div className="border-b bg-white px-4 py-3 space-y-3">
+        {/* Breadcrumbs */}
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Link href="/" className="hover:text-primary hover:underline">Home</Link>
           <ChevronRight className="h-4 w-4" />
           <span className="font-medium text-foreground">Daily Occupancy</span>
         </div>
 
-         {/* Search */}
-         <div className="relative max-w-sm w-full md:w-64">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Search items..."
-                className="w-full bg-background pl-8 h-8 text-sm"
-                value={searchQuery}
-                onChange={(e) => updateUrl("q", e.target.value)}
-              />
-        </div>
-
-        {/* Date Picker */}
-        <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={handlePrevDay} disabled={isEditMode}>
-                <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <div className="relative">
-                <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                <Input
-                    type="date"
-                    value={dateInputValue}
-                    onChange={handleDateInput}
-                    className="w-auto pl-9 h-8"
-                    disabled={isEditMode}
-                />
-            </div>
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={handleNextDay} disabled={isEditMode}>
-                <ChevronRight className="h-4 w-4" />
-            </Button>
-        </div>
-        
-        {/* Occupancy Count */}
-        <div className="flex items-center gap-2 ml-4">
-            <span className="text-sm font-medium">Occupancy:</span>
+        {/* Row 1: Search */}
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Search..."
+              className="w-full pl-8 h-10"
+              value={searchQuery}
+              onChange={(e) => updateUrl("q", e.target.value)}
+            />
+          </div>
+          {/* Occupancy Count */}
+          <div className="flex items-center gap-2 px-3 bg-purple-50 rounded-lg border border-purple-200">
             {isOccupancyEditing ? (
-                <div className="flex items-center gap-1">
-                    <Input 
-                        type="number" 
-                        value={tempOccupancyCount} 
-                        onChange={(e) => setTempOccupancyCount(parseInt(e.target.value) || 0)}
-                        className="w-20 h-8"
-                    />
-                    <Button size="sm" onClick={handleUpdateOccupancy} className="h-8">Save</Button>
-                </div>
+              <div className="flex items-center gap-1">
+                <Input 
+                  type="number" 
+                  value={tempOccupancyCount} 
+                  onChange={(e) => setTempOccupancyCount(parseInt(e.target.value) || 0)}
+                  className="w-16 h-8 text-center text-sm"
+                  onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                />
+                <Button size="sm" onClick={handleUpdateOccupancy} className="h-8 px-2">
+                  <Save className="h-3 w-3" />
+                </Button>
+              </div>
             ) : (
-                <div className="flex items-center gap-2 pointer-events-auto" onClick={() => { setTempOccupancyCount(occupancyCount); setIsOccupancyEditing(true); }}>
-                    <span className="text-lg font-bold text-purple-600 cursor-pointer border-b border-dashed border-purple-300">{occupancyCount}</span>
-                    <span className="text-xs text-muted-foreground">people</span>
-                </div>
+              <div className="flex items-center gap-1 cursor-pointer" onClick={() => { setTempOccupancyCount(occupancyCount); setIsOccupancyEditing(true); }}>
+                <span className="text-lg font-bold text-purple-600">{occupancyCount}</span>
+                <span className="text-xs text-purple-500">ppl</span>
+              </div>
             )}
+          </div>
         </div>
 
-
-        <div className="flex-1" />
-
-        {/* Actions */}
-        {!isEditMode ? (
-            <Button onClick={handleEditStock}>
-                <Pencil className="h-4 w-4 mr-2" /> Update Record
+        {/* Row 2: Date & Update Button */}
+        <div className="flex gap-2 items-center">
+          <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" onClick={handlePrevDay} disabled={isEditMode}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <div className="relative">
+            <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Input
+              type="date"
+              value={dateInputValue}
+              onChange={handleDateInput}
+              className="w-[130px] pl-8 h-10 text-xs"
+              disabled={isEditMode}
+            />
+          </div>
+          <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" onClick={handleNextDay} disabled={isEditMode}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          
+          {/* Spacer */}
+          <div className="flex-1" />
+          
+          {/* Action Buttons */}
+          {!isEditMode ? (
+            <Button onClick={handleEditStock} size="icon" className="h-10 w-10 shrink-0">
+              <Pencil className="h-4 w-4" />
             </Button>
-        ) : (
-             <div className="flex gap-2">
-                <Button variant="outline" onClick={() => { setIsEditMode(false); setEditedValues({}); }}>Cancel</Button>
-                <Button onClick={handleSaveStock} disabled={saving}>
-                   {saving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />} Save
-                </Button>
-             </div>
-        )}
-
+          ) : (
+            <div className="flex gap-2 shrink-0">
+              <Button variant="outline" size="icon" className="h-10 w-10" onClick={() => { setIsEditMode(false); setEditedValues({}); }}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button size="icon" className="h-10 w-10" onClick={handleSaveStock} disabled={saving}>
+                {saving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Table */}
-       <div className="flex-1 overflow-auto bg-white">
-          {loading ? (
-             <div className="flex h-full items-center justify-center">
-                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-             </div>
-          ) : !kitchenId ? (
-             <div className="flex h-full items-center justify-center flex-col gap-2">
-                 <h2 className="text-lg font-semibold text-red-600">Configuration Error</h2>
-                 <p className="text-muted-foreground">"Kitchen" location not found. Please ensure a location named "Kitchen" exists.</p>
-             </div>
-          ) : (
-            <Table>
+      {/* Items List - Card View for Mobile, Table for Desktop */}
+      <div className="flex-1 overflow-auto bg-gray-50 p-4">
+        {loading ? (
+          <div className="space-y-3">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="bg-white rounded-xl shadow-sm border p-4 animate-pulse">
+                <div className="h-6 bg-gray-200 rounded w-1/3 mb-3"></div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="h-16 bg-gray-100 rounded-lg"></div>
+                  <div className="h-16 bg-blue-50 rounded-lg"></div>
+                  <div className="h-16 bg-blue-50 rounded-lg"></div>
+                  <div className="h-16 bg-green-50 rounded-lg"></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : paginatedItems.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+            <Utensils className="h-12 w-12 mb-4 opacity-50" />
+            <p className="text-lg font-medium">No Items Found</p>
+            <p className="text-sm text-center">{searchQuery ? "No items match your search." : "No daily count items configured for Kitchen."}</p>
+          </div>
+        ) : (
+          <>
+            {/* Mobile Card View */}
+            <div className="md:hidden space-y-3">
+              {paginatedItems.map((item) => {
+                const opening = item.openingBalanceUnit;
+                const purchase = getDisplayVal(item._id, "purchasedUnit");
+                const consumed = getDisplayVal(item._id, "consumedUnit");
+                const closing = opening + purchase - consumed;
+                
+                return (
+                  <div key={item._id} className="bg-white rounded-xl shadow-sm border p-4 space-y-3">
+                    {/* Item Name */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Utensils className="h-4 w-4 text-orange-500" />
+                        <Link href={`/admin/items/${item._id}`} className="font-semibold text-gray-900 hover:text-primary hover:underline text-lg">
+                          {item.item}
+                        </Link>
+                      </div>
+                      {item.cookingQty && (
+                        <span className="text-xs bg-orange-50 text-orange-600 px-2 py-1 rounded">{item.cookingQty}</span>
+                      )}
+                    </div>
+                    
+                    {/* Values Grid */}
+                    <div className="grid grid-cols-2 gap-3">
+                      {/* Opening Balance */}
+                      <div className="bg-gray-50 rounded-lg p-3">
+                        <p className="text-xs text-gray-500 mb-1">Opening</p>
+                        <p className="text-lg font-bold text-gray-700">{opening}</p>
+                      </div>
+                      
+                      {/* Purchase - Editable */}
+                      <div className="bg-blue-50 rounded-lg p-3">
+                        <p className="text-xs text-blue-600 mb-1">Purchase</p>
+                        {isEditMode ? (
+                          <Input
+                            type="number"
+                            min="0"
+                            value={purchase}
+                            onChange={(e) => handleValueChange(item._id, "purchasedUnit", parseInt(e.target.value) || 0)}
+                            className="h-10 text-lg font-bold text-center border-blue-200 focus-visible:ring-blue-400"
+                            onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                          />
+                        ) : (
+                          <p className="text-lg font-bold text-blue-700">{purchase}</p>
+                        )}
+                      </div>
+                      
+                      {/* Consumed - Editable */}
+                      <div className="bg-orange-50 rounded-lg p-3">
+                        <p className="text-xs text-orange-600 mb-1">Consumed</p>
+                        {isEditMode ? (
+                          <Input
+                            type="number"
+                            min="0"
+                            value={consumed}
+                            onChange={(e) => handleValueChange(item._id, "consumedUnit", parseInt(e.target.value) || 0)}
+                            className="h-10 text-lg font-bold text-center border-orange-200 focus-visible:ring-orange-400"
+                            onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                          />
+                        ) : (
+                          <p className="text-lg font-bold text-orange-700">{consumed}</p>
+                        )}
+                      </div>
+                      
+                      {/* Closing Balance */}
+                      <div className="bg-green-50 rounded-lg p-3">
+                        <p className="text-xs text-green-600 mb-1">Closing</p>
+                        <p className="text-lg font-bold text-green-700">{closing}</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden md:block bg-white rounded-lg border shadow-sm">
+              <Table>
                 <TableHeader className="bg-muted/50 sticky top-0">
-                    <TableRow>
-                        <TableHead>Item</TableHead>
-                        <TableHead>Package</TableHead>
-                        <TableHead>Cooking Qty</TableHead>
-                        <TableHead className="text-center w-[150px]">Opening Balance</TableHead>
-                         <TableHead className="text-center w-[150px] bg-blue-50/50">Purchase (Unit)</TableHead>
-                        <TableHead className="text-center w-[150px] bg-blue-50/50">Daily Consumption (Unit)</TableHead>
-                        <TableHead className="text-center w-[150px] bg-green-50/50">Closing Inventory</TableHead>
-                    </TableRow>
+                  <TableRow>
+                    <TableHead className="font-semibold pl-4">Item</TableHead>
+                    <TableHead className="font-semibold text-center w-[100px]">Cooking Qty</TableHead>
+                    <TableHead className="font-semibold text-center w-[100px] bg-gray-50/50">Opening</TableHead>
+                    <TableHead className="font-semibold text-center w-[100px] bg-blue-50/50">Purchase</TableHead>
+                    <TableHead className="font-semibold text-center w-[100px] bg-orange-50/50">Consumed</TableHead>
+                    <TableHead className="font-semibold text-center w-[100px] bg-green-50/50">Closing</TableHead>
+                  </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {paginatedItems.map((item, index) => {
-                         const opening = item.openingBalanceUnit;
-                         const purchase = getDisplayVal(item._id, "purchasedUnit");
-                         const consumed = getDisplayVal(item._id, "consumedUnit");
-                         const closing = opening + purchase - consumed;
-                         
-                         // Determine if we need a group header
-                         const prevItem = index > 0 ? paginatedItems[index - 1] : null;
-                         const showHeader = !prevItem || item.subCategory !== prevItem.subCategory;
-                         const subCategoryLabel = item.subCategory || "Other";
+                  {paginatedItems.map((item, index) => {
+                    const opening = item.openingBalanceUnit;
+                    const purchase = getDisplayVal(item._id, "purchasedUnit");
+                    const consumed = getDisplayVal(item._id, "consumedUnit");
+                    const closing = opening + purchase - consumed;
+                    
+                    const prevItem = index > 0 ? paginatedItems[index - 1] : null;
+                    const showHeader = !prevItem || item.subCategory !== prevItem.subCategory;
+                    const subCategoryLabel = item.subCategory || "Other";
 
-                        return (
-                            <Fragment key={item._id}>
-                                {showHeader && (
-                                    <TableRow className="bg-muted/50 hover:bg-muted/50">
-                                        <TableCell colSpan={7} className="font-semibold text-primary py-2">
-                                            {subCategoryLabel}
-                                        </TableCell>
-                                    </TableRow>
-                                )}
-                                <TableRow>
-                                    <TableCell className="font-medium pl-8">
-                                        <div className="flex items-center gap-2">
-                                            {item.isDailyCount && <Utensils className="h-3 w-3 text-orange-500" />}
-                                            <Link href={`/admin/items/${item._id}`} className="hover:underline hover:text-primary">
-                                                {item.item}
-                                            </Link>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>{item.package || "-"}</TableCell>
-                                    <TableCell>{item.cookingQty || "-"}</TableCell>
-                                    <TableCell className="text-center">{opening}</TableCell>
-                                    <TableCell className="text-center bg-blue-50/20">
-                                        {isEditMode ? (
-                                            <Input type="number" min="0" value={purchase} 
-                                               onChange={(e) => handleValueChange(item._id, "purchasedUnit", parseInt(e.target.value)||0)}
-                                               className="w-20 mx-auto text-center h-8 border-blue-200"
-                                               onWheel={(e) => (e.target as HTMLInputElement).blur()}
-                                            />
-                                        ) : purchase}
-                                    </TableCell>
-                                    <TableCell className="text-center bg-blue-50/20">
-                                         {isEditMode ? (
-                                            <Input type="number" min="0" value={consumed} 
-                                               onChange={(e) => handleValueChange(item._id, "consumedUnit", parseInt(e.target.value)||0)}
-                                               className="w-20 mx-auto text-center h-8 border-blue-200"
-                                               onWheel={(e) => (e.target as HTMLInputElement).blur()}
-                                            />
-                                        ) : consumed}
-                                    </TableCell>
-                                    <TableCell className="text-center font-bold text-gray-700 bg-green-50/20">
-                                        {closing}
-                                    </TableCell>
-                                </TableRow>
-                            </Fragment>
-                        );
-                    })}
+                    return (
+                      <Fragment key={item._id}>
+                        {showHeader && (
+                          <TableRow className="bg-muted/50 hover:bg-muted/50">
+                            <TableCell colSpan={6} className="font-semibold text-primary py-2">
+                              {subCategoryLabel}
+                            </TableCell>
+                          </TableRow>
+                        )}
+                        <TableRow>
+                          <TableCell className="font-medium pl-8">
+                            <div className="flex items-center gap-2">
+                              <Utensils className="h-3 w-3 text-orange-500" />
+                              <Link href={`/admin/items/${item._id}`} className="hover:underline hover:text-primary">
+                                {item.item}
+                              </Link>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-center">{item.cookingQty || "-"}</TableCell>
+                          <TableCell className="text-center font-medium text-gray-600 bg-gray-50/30">
+                            {opening}
+                          </TableCell>
+                          <TableCell className="text-center bg-blue-50/20">
+                            {isEditMode ? (
+                              <Input
+                                type="number"
+                                min="0"
+                                value={purchase}
+                                onChange={(e) => handleValueChange(item._id, "purchasedUnit", parseInt(e.target.value) || 0)}
+                                className="w-16 mx-auto text-center h-8 border-blue-200 focus-visible:ring-blue-400"
+                                onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                              />
+                            ) : (
+                              <span>{purchase}</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center bg-orange-50/20">
+                            {isEditMode ? (
+                              <Input
+                                type="number"
+                                min="0"
+                                value={consumed}
+                                onChange={(e) => handleValueChange(item._id, "consumedUnit", parseInt(e.target.value) || 0)}
+                                className="w-16 mx-auto text-center h-8 border-orange-200 focus-visible:ring-orange-400"
+                                onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                              />
+                            ) : (
+                              <span>{consumed}</span>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-center font-bold text-green-700 bg-green-50/20">
+                            {closing}
+                          </TableCell>
+                        </TableRow>
+                      </Fragment>
+                    );
+                  })}
                 </TableBody>
-            </Table>
-          )}
-       </div>
+              </Table>
+            </div>
+          </>
+        )}
+      </div>
+      
+      {/* Pagination Controls */}
+      {!loading && paginatedItems.length > 0 && (
+        <div className="flex-none flex items-center justify-between p-3 border-t bg-white">
+          <div className="text-xs text-muted-foreground">
+            {(currentPage - 1) * itemsPerPage + 1}-{Math.min(currentPage * itemsPerPage, filteredItems.length)} of {filteredItems.length}
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              <span className="hidden sm:inline ml-1">Previous</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages}
+            >
+              <span className="hidden sm:inline mr-1">Next</span>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
    );
 }

@@ -343,75 +343,133 @@ function SoakCycleContent() {
 
   return (
     <div className="w-full h-full flex flex-col">
-      {/* Top Controls - Mobile Optimized */}
-      <div className="border-b bg-white px-4 py-3 space-y-3">
+      {/* Top Controls */}
+      <div className="border-b bg-white px-4 py-3">
         {/* Breadcrumbs */}
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
           <Link href="/" className="hover:text-primary hover:underline">Home</Link>
           <ChevronRight className="h-4 w-4" />
           <span className="font-medium text-foreground">Soak Cycle</span>
         </div>
 
-        {/* Row 1: Search (full width on soak cycle since no location selector) */}
-        <div className="flex gap-2">
-          <div className="relative flex-1">
+        {/* Mobile: Stacked rows */}
+        <div className="md:hidden space-y-3">
+          {/* Row 1: Search */}
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                type="search"
+                placeholder="Search..."
+                className="w-full pl-8 h-10"
+                value={searchQuery}
+                onChange={(e) => updateUrl("q", e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Row 2: Date & Update Button */}
+          <div className="flex gap-2 items-center">
+            <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" onClick={() => {
+              const currentDate = new Date(selectedDate);
+              currentDate.setDate(currentDate.getDate() - 1);
+              updateUrl("date", currentDate.toISOString().split('T')[0]);
+            }} disabled={isEditing}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <div className="relative">
+              <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <Input
+                type="date"
+                value={dateInputValue}
+                onChange={(e) => setDateInputValue(e.target.value)}
+                className="w-[130px] pl-8 h-10 text-xs"
+                disabled={isEditing}
+              />
+            </div>
+            <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" onClick={() => {
+              const currentDate = new Date(selectedDate);
+              currentDate.setDate(currentDate.getDate() + 1);
+              updateUrl("date", currentDate.toISOString().split('T')[0]);
+            }} disabled={isEditing}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            <div className="flex-1" />
+            {!isEditing ? (
+              <Button onClick={() => setIsEditing(true)} size="icon" className="h-10 w-10 shrink-0" disabled={loading}>
+                <Edit2 className="h-4 w-4" />
+              </Button>
+            ) : (
+              <div className="flex gap-2 shrink-0">
+                <Button variant="outline" size="icon" className="h-10 w-10" onClick={() => setIsEditing(false)} disabled={saving}>
+                  <X className="h-4 w-4" />
+                </Button>
+                <Button size="icon" className="h-10 w-10" onClick={handleSave} disabled={saving}>
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Desktop: Single row */}
+        <div className="hidden md:flex gap-3 items-center">
+          {/* Search */}
+          <div className="relative w-64">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               type="search"
-              placeholder="Search..."
-              className="w-full pl-8 h-10"
+              placeholder="Search items..."
+              className="w-full pl-8 h-9"
               value={searchQuery}
               onChange={(e) => updateUrl("q", e.target.value)}
             />
           </div>
-        </div>
 
-        {/* Row 2: Date & Update Button */}
-        <div className="flex gap-2 items-center">
-          <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" onClick={() => {
-            const currentDate = new Date(selectedDate);
-            currentDate.setDate(currentDate.getDate() - 1);
-            updateUrl("date", currentDate.toISOString().split('T')[0]);
-          }} disabled={isEditing}>
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <div className="relative">
-            <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-            <Input
-              type="date"
-              value={dateInputValue}
-              onChange={(e) => setDateInputValue(e.target.value)}
-              className="w-[130px] pl-8 h-10 text-xs"
-              disabled={isEditing}
-            />
+          {/* Date Picker */}
+          <div className="flex items-center gap-1">
+            <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => {
+              const currentDate = new Date(selectedDate);
+              currentDate.setDate(currentDate.getDate() - 1);
+              updateUrl("date", currentDate.toISOString().split('T')[0]);
+            }} disabled={isEditing}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <div className="relative">
+              <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+              <Input
+                type="date"
+                value={dateInputValue}
+                onChange={(e) => setDateInputValue(e.target.value)}
+                className="w-[140px] pl-9 h-9"
+                disabled={isEditing}
+              />
+            </div>
+            <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => {
+              const currentDate = new Date(selectedDate);
+              currentDate.setDate(currentDate.getDate() + 1);
+              updateUrl("date", currentDate.toISOString().split('T')[0]);
+            }} disabled={isEditing}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
           </div>
-          <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" onClick={() => {
-            const currentDate = new Date(selectedDate);
-            currentDate.setDate(currentDate.getDate() + 1);
-            updateUrl("date", currentDate.toISOString().split('T')[0]);
-          }} disabled={isEditing}>
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-          
-          {/* Spacer */}
+
           <div className="flex-1" />
-          
+
           {/* Action Buttons */}
           {!isEditing ? (
-            <Button onClick={() => setIsEditing(true)} size="icon" className="h-10 w-10 shrink-0" disabled={loading}>
-              <Edit2 className="h-4 w-4" />
+            <Button onClick={() => setIsEditing(true)} size="sm" disabled={loading}>
+              <Edit2 className="h-4 w-4 mr-2" />
+              Update Records
             </Button>
           ) : (
-            <div className="flex gap-2 shrink-0">
-              <Button variant="outline" size="icon" className="h-10 w-10" onClick={() => setIsEditing(false)} disabled={saving}>
-                <X className="h-4 w-4" />
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => setIsEditing(false)} disabled={saving}>
+                Cancel
               </Button>
-              <Button size="icon" className="h-10 w-10" onClick={handleSave} disabled={saving}>
-                {saving ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="h-4 w-4" />
-                )}
+              <Button size="sm" onClick={handleSave} disabled={saving}>
+                {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                Save
               </Button>
             </div>
           )}

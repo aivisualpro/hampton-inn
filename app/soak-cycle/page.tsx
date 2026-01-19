@@ -499,8 +499,8 @@ function SoakCycleContent() {
           </div>
         ) : (
           <>
-            {/* Mobile Card View */}
-            <div className="md:hidden space-y-3">
+            {/* Mobile/Tablet Card View */}
+            <div className="lg:hidden grid grid-cols-1 sm:grid-cols-2 gap-3">
               {paginatedItems.map((item) => (
                 <div key={item._id} className="bg-white rounded-xl shadow-sm border p-4 space-y-3">
                   {/* Item Name */}
@@ -563,7 +563,7 @@ function SoakCycleContent() {
             </div>
 
             {/* Desktop Table View */}
-            <div className="hidden md:block bg-white rounded-lg border shadow-sm">
+            <div className="hidden lg:block bg-white rounded-lg border shadow-sm">
               <Table>
                 <TableHeader className="bg-muted/50 sticky top-0">
                   <TableRow>

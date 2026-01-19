@@ -62,6 +62,7 @@ export default function Home() {
       color: "text-emerald-600",
       image: "/bg_stock_purchase.png",
       value: "3 Pending",
+      href: "/stock-purchase",
     },
     {
       title: "Daily Occupancy",

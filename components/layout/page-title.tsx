@@ -10,6 +10,7 @@ const TITLE_MAP: Record<string, string> = {
   settings: "Settings",
   locations: "Locations",
   "stock-count": "Stock Count",
+  "stock-purchase": "Stock Purchase",
 };
 
 export function PageTitle() {

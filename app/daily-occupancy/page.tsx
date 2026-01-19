@@ -525,8 +525,8 @@ function DailyOccupancyContent() {
           </div>
         ) : (
           <>
-            {/* Mobile Card View */}
-            <div className="md:hidden space-y-3">
+            {/* Mobile/Tablet Card View */}
+            <div className="lg:hidden grid grid-cols-1 sm:grid-cols-2 gap-3">
               {paginatedItems.map((item) => {
                 const opening = item.openingBalanceUnit;
                 const purchase = getDisplayVal(item._id, "purchasedUnit");
@@ -602,7 +602,7 @@ function DailyOccupancyContent() {
             </div>
 
             {/* Desktop Table View */}
-            <div className="hidden md:block bg-white rounded-lg border shadow-sm">
+            <div className="hidden lg:block bg-white rounded-lg border shadow-sm">
               <Table>
                 <TableHeader className="bg-muted/50 sticky top-0">
                   <TableRow>

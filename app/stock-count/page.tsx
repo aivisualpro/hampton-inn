@@ -561,19 +561,22 @@ function StockCountContent() {
           <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" onClick={handlePrevDay} disabled={isEditMode}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <div className="relative flex-1">
+          <div className="relative">
             <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
             <Input
               type="date"
               value={dateInputValue}
               onChange={handleDateChange}
-              className="w-full pl-9 h-10"
+              className="w-[140px] pl-9 h-10"
               disabled={isEditMode}
             />
           </div>
           <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" onClick={handleNextDay} disabled={isEditMode}>
             <ChevronRight className="h-4 w-4" />
           </Button>
+          
+          {/* Spacer */}
+          <div className="flex-1" />
           
           {/* Action Buttons */}
           {selectedLocation && locationItems.length > 0 && (
@@ -604,8 +607,18 @@ function StockCountContent() {
       {/* Items List - Card View for Mobile, Table for Desktop */}
       <div className="flex-1 overflow-auto bg-gray-50 p-4">
         {loading ? (
-          <div className="flex items-center justify-center h-full">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          <div className="space-y-3">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <div key={i} className="bg-white rounded-xl shadow-sm border p-4 animate-pulse">
+                <div className="h-6 bg-gray-200 rounded w-1/3 mb-3"></div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="h-16 bg-gray-100 rounded-lg"></div>
+                  <div className="h-16 bg-gray-100 rounded-lg"></div>
+                  <div className="h-16 bg-blue-50 rounded-lg"></div>
+                  <div className="h-16 bg-blue-50 rounded-lg"></div>
+                </div>
+              </div>
+            ))}
           </div>
         ) : !selectedLocation ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">

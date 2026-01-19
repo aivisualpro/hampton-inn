@@ -60,6 +60,32 @@ type User = {
   lastSelectedDate?: string;
 };
 
+// LocalStorage keys for instant loading
+const STORAGE_KEYS = {
+  LAST_LOCATION: "hampton_last_location",
+  LAST_DATE: "hampton_last_date",
+};
+
+// Helper to read from localStorage (instant, no async)
+const readFromStorage = (key: string): string | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+
+// Helper to write to localStorage
+const writeToStorage = (key: string, value: string): void => {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(key, value);
+  } catch (e) {
+    console.warn("Failed to write to localStorage:", e);
+  }
+};
+
 function StockPurchaseContent() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [allLocations, setAllLocations] = useState<Location[]>([]);
@@ -80,6 +106,9 @@ function StockPurchaseContent() {
   const getDateFromUrl = () => {
     const paramDate = searchParams.get("date");
     if (paramDate) return paramDate;
+    // Check localStorage first for instant loading
+    const cachedDate = readFromStorage(STORAGE_KEYS.LAST_DATE);
+    if (cachedDate) return cachedDate;
     const now = new Date();
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
@@ -96,16 +125,15 @@ function StockPurchaseContent() {
     setDateInputValue(selectedDate);
   }, [selectedDate]);
 
-  const saveDatePreference = async (dateStr: string) => {
-    try {
-      await fetch("/api/auth/me", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lastSelectedDate: dateStr })
-      });
-    } catch(e) {
-      console.error("Failed to save date preference", e);
-    }
+  const saveDatePreference = (dateStr: string) => {
+    // Write to localStorage IMMEDIATELY
+    writeToStorage(STORAGE_KEYS.LAST_DATE, dateStr);
+    // Sync to server (async, non-blocking)
+    fetch("/api/auth/me", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lastSelectedDate: dateStr })
+    }).catch(e => console.error("Failed to save date preference", e));
   };
 
   const updateUrl = useCallback((key: string, value: string | null) => {
@@ -203,6 +231,11 @@ function StockPurchaseContent() {
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
+      
+      // STEP 1: Read from localStorage IMMEDIATELY for instant UI
+      const cachedLocationId = readFromStorage(STORAGE_KEYS.LAST_LOCATION);
+      
+      // STEP 2: Fetch data from APIs
       const [user, locations] = await Promise.all([
         fetchCurrentUser(),
         fetchLocations(),
@@ -221,19 +254,27 @@ function StockPurchaseContent() {
       }
       setUserLocations(filteredLocations);
 
-      // Set initial location:
-      // 1. URL Parameter
-      // 2. User's Last Selected Location (if in allowed list)
-      // 3. First available location
+      // STEP 3: Set initial location (priority: URL > localStorage > server)
       const urlLocationId = searchParams.get("location");
       let initialLocation: Location | undefined;
 
+      // Try URL first
       if (urlLocationId) {
         initialLocation = filteredLocations.find((l: Location) => l._id === urlLocationId);
       } 
       
+      // Try localStorage cache (instant)
+      if (!initialLocation && cachedLocationId) {
+        initialLocation = filteredLocations.find((l: Location) => l._id === cachedLocationId);
+      }
+      
+      // Try server preference
       if (!initialLocation && user?.lastSelectedLocation) {
         initialLocation = filteredLocations.find((l: Location) => l._id === user.lastSelectedLocation);
+        // Sync localStorage with server preference
+        if (initialLocation) {
+          writeToStorage(STORAGE_KEYS.LAST_LOCATION, initialLocation._id);
+        }
       }
 
       if (initialLocation) {
@@ -246,9 +287,10 @@ function StockPurchaseContent() {
         }
       }
       
-      // Handle Saved Date Preference
+      // Handle server date preference (only if not already set)
       const urlDate = searchParams.get("date");
-      if (!urlDate && user?.lastSelectedDate) {
+      const cachedDate = readFromStorage(STORAGE_KEYS.LAST_DATE);
+      if (!urlDate && !cachedDate && user?.lastSelectedDate) {
         updateUrl("date", user.lastSelectedDate);
       }
       
@@ -310,6 +352,10 @@ function StockPurchaseContent() {
     setIsLocationSelectorOpen(false);
     updateUrl("location", location._id);
     
+    // Write to localStorage IMMEDIATELY for instant loading next time
+    writeToStorage(STORAGE_KEYS.LAST_LOCATION, location._id);
+    
+    // Sync to server (async, non-blocking)
     try {
       await fetch("/api/auth/me", {
         method: "PUT",

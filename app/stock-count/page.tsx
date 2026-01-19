@@ -70,6 +70,32 @@ type User = {
   lastSelectedDate?: string;
 };
 
+// LocalStorage keys for instant loading
+const STORAGE_KEYS = {
+  LAST_LOCATION: "hampton_last_location",
+  LAST_DATE: "hampton_last_date",
+};
+
+// Helper to read from localStorage (instant, no async)
+const readFromStorage = (key: string): string | null => {
+  if (typeof window === "undefined") return null;
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+};
+
+// Helper to write to localStorage
+const writeToStorage = (key: string, value: string): void => {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(key, value);
+  } catch (e) {
+    console.warn("Failed to write to localStorage:", e);
+  }
+};
+
 function StockCountContent() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [allLocations, setAllLocations] = useState<Location[]>([]);
@@ -124,16 +150,16 @@ function StockCountContent() {
       router.replace(`${pathname}?${params.toString()}`);
   };
 
-  const saveDatePreference = async (dateStr: string) => {
-      try {
-          await fetch("/api/auth/me", {
-              method: "PUT",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ lastSelectedDate: dateStr })
-          });
-      } catch(e) {
-          console.error("Failed to save date preference", e);
-      }
+  const saveDatePreference = (dateStr: string) => {
+      // Write to localStorage IMMEDIATELY for instant loading
+      writeToStorage(STORAGE_KEYS.LAST_DATE, dateStr);
+      
+      // Sync to server (async, non-blocking)
+      fetch("/api/auth/me", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ lastSelectedDate: dateStr })
+      }).catch(e => console.error("Failed to save date preference", e));
   };
 
   const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -256,6 +282,20 @@ function StockCountContent() {
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
+      
+      // STEP 1: Read from localStorage IMMEDIATELY for instant UI
+      const cachedLocationId = readFromStorage(STORAGE_KEYS.LAST_LOCATION);
+      const cachedDate = readFromStorage(STORAGE_KEYS.LAST_DATE);
+      
+      // Apply cached date to URL if not already specified
+      const urlDate = searchParams.get("date");
+      if (!urlDate && cachedDate) {
+        const params = new URLSearchParams(window.location.search);
+        params.set("date", cachedDate);
+        router.replace(`${pathname}?${params.toString()}`);
+      }
+      
+      // STEP 2: Fetch data from APIs
       const [user, locations] = await Promise.all([
         fetchCurrentUser(),
         fetchLocations(),
@@ -274,24 +314,26 @@ function StockCountContent() {
       }
       setUserLocations(filteredLocations);
 
-       // Set initial location:
-       // 1. URL Parameter
-       // 2. User's Last Selected Location (if in allowed list)
-       // 3. First available location
+       // STEP 3: Set initial location (priority: URL > localStorage > server > first available)
        const urlLocationId = searchParams.get("location");
        let initialLocation: Location | undefined;
 
+       // Try URL first
        if (urlLocationId) {
           initialLocation = filteredLocations.find((l: Location) => l._id === urlLocationId);
        } 
        
+       // Try localStorage cache (instant)
+       if (!initialLocation && cachedLocationId) {
+          initialLocation = filteredLocations.find((l: Location) => l._id === cachedLocationId);
+       }
+       
+       // Try server preference
        if (!initialLocation && user?.lastSelectedLocation) {
           initialLocation = filteredLocations.find((l: Location) => l._id === user.lastSelectedLocation);
-          // If we fell back to saved preference, update the URL to match
+          // Sync localStorage with server preference
           if (initialLocation) {
-             // We can't use updateUrl here directly because we are inside useEffect
-             // But we can let the state update trigger a re-render or side effect if needed
-             // For now, let's just set the state. Ideally, we sync URL too.
+            writeToStorage(STORAGE_KEYS.LAST_LOCATION, initialLocation._id);
           }
        }
 
@@ -305,11 +347,10 @@ function StockCountContent() {
           }
        }
        
-       // Handle Saved Date Preference
-       const urlDate = searchParams.get("date");
-       if (!urlDate && user?.lastSelectedDate) {
-           // If no date in URL, but user has saved date, use it
+       // Handle server date preference (only if not in URL or localStorage)
+       if (!urlDate && !cachedDate && user?.lastSelectedDate) {
            updateUrl("date", user.lastSelectedDate);
+           writeToStorage(STORAGE_KEYS.LAST_DATE, user.lastSelectedDate);
        }
       
       setLoading(false);
@@ -335,8 +376,11 @@ function StockCountContent() {
     setSelectedLocation(location);
     setIsLocationSelectorOpen(false);
     updateUrl("location", location._id);
+    
+    // Write to localStorage IMMEDIATELY for instant loading next time
+    writeToStorage(STORAGE_KEYS.LAST_LOCATION, location._id);
 
-    // Persist to user profile
+    // Persist to user profile (async, non-blocking)
     try {
         await fetch("/api/auth/me", {
             method: "PUT",

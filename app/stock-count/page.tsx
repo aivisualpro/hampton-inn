@@ -690,7 +690,7 @@ function StockCountContent() {
                 type="date"
                 value={dateInputValue}
                 onChange={handleDateChange}
-                className="w-[140px] pl-9 h-9"
+                className="w-[180px] pl-9 h-9"
                 disabled={isEditMode}
               />
             </div>

@@ -519,7 +519,7 @@ export function TransactionsList({ itemId, headerContent }: TransactionsListProp
                     <Input
                         type="search"
                         placeholder="Search..."
-                        className="w-full bg-background pl-8 h-8 text-sm"
+                        className="w-full bg-background pl-8 h-8"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                     />
@@ -538,7 +538,7 @@ export function TransactionsList({ itemId, headerContent }: TransactionsListProp
                         <Input
                             type="search"
                             placeholder="Search..."
-                            className="w-full bg-background pl-7 h-8 text-xs"
+                            className="w-full bg-background pl-7 h-8"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                         />

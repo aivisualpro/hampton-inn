@@ -178,14 +178,14 @@ export default function ParLevelReportPage() {
                                 <TableHead className="text-center bg-muted/50">King Room Qty</TableHead>
                                 <TableHead className="text-center bg-muted/50">Dbl Queen Qty</TableHead>
                                 <TableHead className="text-center font-bold bg-blue-50 text-blue-700">Total Needed</TableHead>
+                                <TableHead className="text-center font-bold bg-green-50 text-green-700">Par Level</TableHead>
                                 
                                 {/* Dynamic Group Columns */}
                                 {sortedGroupNames.map(groupName => (
                                     <TableHead key={groupName} className="text-center bg-gray-50">{groupName}</TableHead>
                                 ))}
 
-                                <TableHead className="text-center font-bold bg-gray-100 text-gray-800">Total Inventory</TableHead>
-                                <TableHead className="text-center font-bold bg-green-50 text-green-700 pr-6">Par Level</TableHead>
+                                <TableHead className="text-center font-bold bg-gray-100 text-gray-800 pr-6">Total Inventory</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -200,14 +200,7 @@ export default function ParLevelReportPage() {
                                     <TableCell className="text-center text-muted-foreground">{row.item.defaultDoubleQueenQty}</TableCell>
                                     <TableCell className="text-center font-semibold bg-blue-50/20 text-blue-700">{row.totalNeeded}</TableCell>
                                     
-                                    {sortedGroupNames.map(groupName => (
-                                        <TableCell key={groupName} className="text-center bg-gray-50/20">
-                                            {row.groupStocks[groupName]}
-                                        </TableCell>
-                                    ))}
-
-                                    <TableCell className="text-center font-bold bg-gray-100/50">{row.totalStockAllLocations}</TableCell>
-                                    <TableCell className={`text-center font-bold pr-6 ${
+                                    <TableCell className={`text-center font-bold ${
                                         row.parLevel === 'N/A' 
                                             ? '' 
                                             : parseFloat(row.parLevel) < (settings.parLevelThreshold ?? 1) 
@@ -216,6 +209,14 @@ export default function ParLevelReportPage() {
                                     }`}>
                                         {row.parLevel}
                                     </TableCell>
+
+                                    {sortedGroupNames.map(groupName => (
+                                        <TableCell key={groupName} className="text-center bg-gray-50/20">
+                                            {row.groupStocks[groupName]}
+                                        </TableCell>
+                                    ))}
+
+                                    <TableCell className="text-center font-bold bg-gray-100/50 pr-6">{row.totalStockAllLocations}</TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>

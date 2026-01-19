@@ -89,6 +89,48 @@ export default function TransactionsPage() {
   // Delete Dialog State
   const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const toggleSelection = (id: string) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedIds(next);
+  };
+
+  const toggleAll = () => {
+    if (selectedIds.size === displayedTransactions.length) {
+        setSelectedIds(new Set());
+    } else {
+        setSelectedIds(new Set(displayedTransactions.map(t => t._id)));
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.size === 0) return;
+    
+    // Optimistic
+    const prev = [...transactions];
+    const idsToDelete = Array.from(selectedIds);
+    
+    // We'll use the existing delete dialog logic if it was single,
+    // but for multiple we'll just confirm via window or use a specific dialog.
+    // Let's use window.confirm for speed as requested "quick".
+    if (!window.confirm(`Delete ${idsToDelete.length} transactions?`)) return;
+
+    setTransactions(prev => prev.filter(t => !selectedIds.has(t._id)));
+    setSelectedIds(new Set());
+    toast({ title: "Deleted", description: `Deleting ${idsToDelete.length} transactions...` });
+
+    try {
+        await Promise.all(idsToDelete.map(id => fetch(`/api/transactions/${id}`, { method: "DELETE" })));
+        toast({ title: "Success", description: "Transactions deleted." });
+    } catch(e) {
+        console.error(e);
+        setTransactions(prev); // Revert
+        toast({ variant: "destructive", title: "Error", description: "Failed to delete items." });
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -230,6 +272,7 @@ export default function TransactionsPage() {
   // Reset visible count on search
   useEffect(() => {
       setVisibleCount(20);
+      setSelectedIds(new Set()); // Reset selection on search
   }, [searchQuery]);
 
 
@@ -246,6 +289,12 @@ export default function TransactionsPage() {
           <ChevronRight className="h-4 w-4" />
           <span className="font-medium text-foreground">Transactions</span>
         </div>
+
+        {selectedIds.size > 0 && (
+             <Button variant="destructive" size="sm" onClick={handleDeleteSelected}>
+                Delete ({selectedIds.size})
+             </Button>
+        )}
 
         {/* Search Bar */}
         <div className="relative max-w-sm w-full md:w-64">
@@ -267,9 +316,63 @@ export default function TransactionsPage() {
             ref={scrollContainerRef}
             onScroll={handleScroll}
           >
-            <Table>
+
+            {/* Mobile Card View */}
+            <div className="md:hidden p-2 space-y-2">
+                {displayedTransactions.map(t => {
+                     const opening = (t.countedUnit || 0) - (t.purchasedUnit || 0) - (t.soakUnit || 0) + (t.consumedUnit || 0); 
+                     return (
+                        <div key={t._id} className="bg-white border rounded-lg p-3 shadow-sm text-xs relative">
+                            {/* Selection Checkbox Mobile? Maybe skip for density, or add top right */}
+                            <div className="absolute top-3 right-3 flex gap-2">
+                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleEditClick(t)}>
+                                    <Pencil className="h-3 w-3" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-6 w-6 text-red-600" onClick={() => handleDeleteClick(t._id)}>
+                                    <Trash2 className="h-3 w-3" />
+                                </Button>
+                            </div>
+
+                            <div className="pr-16 mb-2">
+                                <div className="font-semibold text-sm">{items[t.item] || t.item}</div>
+                                <div className="text-muted-foreground">{format(new Date(t.date), "MMM d, yyyy")} • {locations[t.location] || t.location}</div>
+                            </div>
+                            
+                            <div className="grid grid-cols-4 gap-1 text-center bg-gray-50 rounded p-2">
+                                <div>
+                                    <div className="text-[10px] text-gray-500">Open</div>
+                                    <div className="font-mono">{opening}</div>
+                                </div>
+                                <div className="text-blue-600">
+                                    <div className="text-[10px] text-blue-400">P/S</div>
+                                    <div className="font-mono">{(t.purchasedUnit||0)+(t.soakUnit||0) || "-"}</div>
+                                </div>
+                                <div className="text-red-600">
+                                    <div className="text-[10px] text-red-400">C/D</div>
+                                    <div className="font-mono">{t.consumedUnit || "-"}</div>
+                                </div>
+                                <div className="font-bold">
+                                    <div className="text-[10px] text-gray-500">Close</div>
+                                    <div className="font-mono">{t.countedUnit}</div>
+                                </div>
+                            </div>
+                        </div>
+                     );
+                })}
+
+
+            </div>
+
+            <Table className="hidden md:table">
                 <TableHeader className="bg-white sticky top-0 z-10 shadow-sm">
                     <TableRow className="bg-gray-50/50 border-b">
+                        <TableHead className="w-[40px] pl-4">
+                            <input type="checkbox" 
+                                className="rounded border-gray-300"
+                                checked={displayedTransactions.length > 0 && selectedIds.size === displayedTransactions.length}
+                                onChange={toggleAll}
+                            />
+                        </TableHead>
                         <TableHead className="w-[100px] pl-4">Type</TableHead>
                         <TableHead className="w-[100px] pl-4">Date</TableHead>
                         <TableHead className="w-[150px]">Location</TableHead>
@@ -286,7 +389,7 @@ export default function TransactionsPage() {
                 <TableBody>
                     {loading ? (
                          <TableRow>
-                            <TableCell colSpan={9} className="h-24 text-center">
+                            <TableCell colSpan={12} className="h-24 text-center">
                                 <div className="flex items-center justify-center gap-2">
                                     <Loader2 className="h-4 w-4 animate-spin" />
                                     Loading...
@@ -295,7 +398,7 @@ export default function TransactionsPage() {
                         </TableRow>
                     ) : displayedTransactions.length === 0 ? (
                         <TableRow>
-                             <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
+                             <TableCell colSpan={12} className="h-24 text-center text-muted-foreground">
                                 No transactions found.
                              </TableCell>
                         </TableRow>
@@ -310,6 +413,13 @@ export default function TransactionsPage() {
 
                                 return (
                                 <TableRow key={t._id} className="hover:bg-muted/50 border-b">
+                                    <TableCell className="pl-4">
+                                        <input type="checkbox" 
+                                            className="rounded border-gray-300"
+                                            checked={selectedIds.has(t._id)}
+                                            onChange={() => toggleSelection(t._id)}
+                                        />
+                                    </TableCell>
                                     <TableCell className="pl-4 font-medium text-xs whitespace-nowrap text-muted-foreground w-[100px]">
                                         {(() => {
                                             const types = [];
@@ -358,33 +468,21 @@ export default function TransactionsPage() {
                                         {totalStockMap[t.item]?.totalUnit || 0}
                                     </TableCell>
                                     <TableCell>
-                                        <DropdownMenu>
-                                          <DropdownMenuTrigger asChild>
-                                            <Button variant="ghost" className="h-8 w-8 p-0">
-                                              <span className="sr-only">Open menu</span>
-                                              <MoreHorizontal className="h-4 w-4" />
+                                        <div className="flex items-center gap-1">
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600" onClick={() => handleEditClick(t)}>
+                                                <Pencil className="h-3.5 w-3.5" />
                                             </Button>
-                                          </DropdownMenuTrigger>
-                                          <DropdownMenuContent align="end">
-                                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                            <DropdownMenuItem onClick={() => handleEditClick(t)}>
-                                              <Pencil className="mr-2 h-4 w-4" />
-                                              Edit
-                                            </DropdownMenuItem>
-                                              <DropdownMenuSeparator />
-                                              <DropdownMenuItem onClick={() => handleDeleteClick(t._id)} className="text-red-600">
-                                                <Trash2 className="mr-2 h-4 w-4" />
-                                                Delete
-                                              </DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                          </DropdownMenu>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-red-600" onClick={() => handleDeleteClick(t._id)}>
+                                                <Trash2 className="h-3.5 w-3.5" />
+                                            </Button>
+                                        </div>
                                       </TableCell>
                                   </TableRow>
                               )})}
                               {/* Loading indicator for infinite scroll if needed, though strictly we just append rows */}
                               {visibleCount < filteredTransactions.length && (
                                   <TableRow>
-                                      <TableCell colSpan={9} className="h-12 text-center text-xs text-muted-foreground">
+                                      <TableCell colSpan={12} className="h-12 text-center text-xs text-muted-foreground">
                                           Scroll for more...
                                       </TableCell>
                                   </TableRow>
@@ -430,11 +528,15 @@ export default function TransactionsPage() {
           </DialogHeader>
           {editingTransaction && (
             <div className="grid gap-4 py-4">
-               <div className="grid grid-cols-4 items-center gap-4">
-                <Label className="text-right">Date</Label>
-                <div className="col-span-3 font-medium">
-                   {format(new Date(editingTransaction.date), "PPP")}
-                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="date" className="text-right">Date</Label>
+                <Input
+                    id="date"
+                    type="date"
+                    value={editingTransaction.date ? editingTransaction.date.split('T')[0] : ''}
+                    onChange={(e) => setEditingTransaction({ ...editingTransaction, date: e.target.value })}
+                    className="col-span-3"
+                />
               </div>
               <div className="grid grid-cols-4 items-center gap-4">
                 <Label className="text-right">Item</Label>

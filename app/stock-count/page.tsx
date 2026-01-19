@@ -519,100 +519,94 @@ function StockCountContent() {
 
   return (
     <div className="w-full h-full flex flex-col">
-      {/* Top Bar: Location Selector, Date Picker, and Action Buttons */}
-      <div className="border-b bg-white px-4 py-3 flex flex-wrap gap-3 items-center">
+      {/* Top Controls - Mobile Optimized */}
+      <div className="border-b bg-white px-4 py-3 space-y-3">
         {/* Breadcrumbs */}
-        <div className="flex items-center gap-2 text-sm text-muted-foreground mr-4">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Link href="/" className="hover:text-primary hover:underline">Home</Link>
           <ChevronRight className="h-4 w-4" />
           <span className="font-medium text-foreground">Stock Count</span>
         </div>
 
-        {/* Location Selector */}
-        <Button
-          variant="outline"
-          className="justify-between min-w-[200px]"
-          onClick={() => setIsLocationSelectorOpen(true)}
-          disabled={isEditMode}
-        >
-          <div className="flex items-center gap-2">
-            <MapPin className="h-4 w-4 text-muted-foreground" />
-            <span className={selectedLocation ? "font-medium" : "text-muted-foreground"}>
-              {selectedLocation ? selectedLocation.name : "Select Location"}
-            </span>
-          </div>
-          <ChevronDown className="h-4 w-4 text-muted-foreground" />
-        </Button>
-
-         {/* Search Bar */}
-         <div className="relative max-w-sm w-full md:w-64">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Search items..."
-                className="w-full bg-background pl-8 h-8 text-sm"
-                value={searchQuery}
-                onChange={(e) => updateUrl("q", e.target.value)}
-              />
-        </div>
-
-        {/* Date Picker */}
-        <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={handlePrevDay} disabled={isEditMode}>
-                <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <div className="relative">
-                <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                <Input
-                    type="date"
-                    value={dateInputValue} // Use local state
-                    onChange={handleDateChange}
-                    className="w-auto pl-9 h-8"
-                    disabled={isEditMode}
-                />
+        {/* Row 1: Location & Search */}
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            className="flex-1 justify-between text-left"
+            onClick={() => setIsLocationSelectorOpen(true)}
+            disabled={isEditMode}
+          >
+            <div className="flex items-center gap-2 truncate">
+              <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
+              <span className={selectedLocation ? "font-medium truncate" : "text-muted-foreground truncate"}>
+                {selectedLocation ? selectedLocation.name : "Select Location"}
+              </span>
             </div>
-            <Button variant="outline" size="icon" className="h-8 w-8" onClick={handleNextDay} disabled={isEditMode}>
-                <ChevronRight className="h-4 w-4" />
-            </Button>
+            <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+          </Button>
+          <div className="relative flex-1">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Search..."
+              className="w-full pl-8 h-10"
+              value={searchQuery}
+              onChange={(e) => updateUrl("q", e.target.value)}
+            />
+          </div>
         </div>
 
-        {/* Spacer */}
-        <div className="flex-1" />
-
-        {/* Action Buttons */}
-        {selectedLocation && locationItems.length > 0 && (
-          <>
-            {!isEditMode ? (
-              <Button onClick={handleUpdateStock}>
-                <Pencil className="h-4 w-4 mr-2" />
-                Update Stock
-              </Button>
-            ) : (
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={handleCancel} disabled={saving}>
-                  Cancel
+        {/* Row 2: Date & Update Stock Button */}
+        <div className="flex gap-2 items-center">
+          <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" onClick={handlePrevDay} disabled={isEditMode}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <div className="relative flex-1">
+            <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+            <Input
+              type="date"
+              value={dateInputValue}
+              onChange={handleDateChange}
+              className="w-full pl-9 h-10"
+              disabled={isEditMode}
+            />
+          </div>
+          <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" onClick={handleNextDay} disabled={isEditMode}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+          
+          {/* Action Buttons */}
+          {selectedLocation && locationItems.length > 0 && (
+            <>
+              {!isEditMode ? (
+                <Button onClick={handleUpdateStock} className="shrink-0">
+                  <Pencil className="h-4 w-4 mr-2" />
+                  Update Stock
                 </Button>
-                <Button onClick={handleSave} disabled={saving}>
-                  {saving ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="h-4 w-4 mr-2" />
-                      Save
-                    </>
-                  )}
-                </Button>
-              </div>
-            )}
-          </>
-        )}
+              ) : (
+                <div className="flex gap-2 shrink-0">
+                  <Button variant="outline" onClick={handleCancel} disabled={saving}>
+                    Cancel
+                  </Button>
+                  <Button onClick={handleSave} disabled={saving}>
+                    {saving ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <>
+                        <Save className="h-4 w-4 mr-2" />
+                        Save
+                      </>
+                    )}
+                  </Button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
-      {/* Items Table */}
-      <div className="flex-1 overflow-auto bg-white">
+      {/* Items List - Card View for Mobile, Table for Desktop */}
+      <div className="flex-1 overflow-auto bg-gray-50 p-4">
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -629,105 +623,178 @@ function StockCountContent() {
             <p className="text-sm">This location has no items assigned</p>
           </div>
         ) : (
-          <Table>
-            <TableHeader className="bg-muted/50 sticky top-0">
-              <TableRow>
-                <TableHead className="font-semibold pl-4">Item</TableHead>
-                <TableHead className="font-semibold text-center w-[150px] bg-gray-50/50">Opening Balance (Unit)</TableHead>
-                <TableHead className="font-semibold text-center w-[150px] bg-gray-50/50">Opening Balance (Package)</TableHead>
-                <TableHead className="font-semibold text-center w-[150px] bg-blue-50/50">Count Unit</TableHead>
-                <TableHead className="font-semibold text-center w-[150px] bg-blue-50/50">Count Package</TableHead>
-                <TableHead className="font-semibold text-center w-[150px] bg-green-50/50">Closing Balance (Unit)</TableHead>
-                <TableHead className="font-semibold text-center w-[150px] bg-green-50/50">Closing Balance (Package)</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+          <>
+            {/* Mobile Card View */}
+            <div className="md:hidden space-y-3">
               {paginatedItems.map((item) => (
-                <TableRow key={item._id}>
-                  <TableCell className="font-medium pl-4">
-                      <Link href={`/admin/items/${item._id}`} className="hover:underline hover:text-primary">
-                        {item.item}
-                      </Link>
-                  </TableCell>
-                  <TableCell className="text-center font-medium text-gray-600 bg-gray-50/30">
-                      {item.openingBalanceUnit}
-                  </TableCell>
-                  <TableCell className="text-center font-medium text-gray-600 bg-gray-50/30">
-                      {item.openingBalancePackage}
-                  </TableCell>
-                  <TableCell className="text-center bg-blue-50/20">
-                    {isEditMode ? (
-                      <Input
-                        type="number"
-                        min="0"
-                        value={getDisplayValue(item._id, "countedUnit")}
-                        onChange={(e) => handleValueChange(item._id, "countedUnit", parseInt(e.target.value) || 0)}
-                        className="w-20 mx-auto text-center h-8 border-blue-200 focus-visible:ring-blue-400"
-                        onWheel={(e) => (e.target as HTMLInputElement).blur()}
-                      />
-                    ) : (
-                      <span>{item.countedUnit}</span>
+                <div key={item._id} className="bg-white rounded-xl shadow-sm border p-4 space-y-3">
+                  {/* Item Name */}
+                  <div className="flex items-center justify-between">
+                    <Link href={`/admin/items/${item._id}`} className="font-semibold text-gray-900 hover:text-primary hover:underline text-lg">
+                      {item.item}
+                    </Link>
+                    {item.package && (
+                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">{item.package}</span>
                     )}
-                  </TableCell>
-                  <TableCell className="text-center bg-blue-50/20">
-                    {isEditMode ? (
-                      <Input
-                        type="number"
-                        min="0"
-                        value={getDisplayValue(item._id, "countedPackage")}
-                        onChange={(e) => handleValueChange(item._id, "countedPackage", parseInt(e.target.value) || 0)}
-                        className="w-20 mx-auto text-center h-8 border-blue-200 focus-visible:ring-blue-400"
-                        onWheel={(e) => (e.target as HTMLInputElement).blur()}
-                      />
-                    ) : (
-                      <span>{item.countedPackage}</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-center font-medium text-gray-700 bg-green-50/20">
-                      {/* Closing Balance mirrors Counted Value */}
-                      {getDisplayValue(item._id, "countedUnit")}
-                  </TableCell>
-                  <TableCell className="text-center font-medium text-gray-700 bg-green-50/20">
-                      {/* Closing Balance mirrors Counted Value */}
-                      {getDisplayValue(item._id, "countedPackage")}
-                  </TableCell>
-                </TableRow>
+                  </div>
+                  
+                  {/* Values Grid */}
+                  <div className="grid grid-cols-2 gap-3">
+                    {/* Opening Balance */}
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="text-xs text-gray-500 mb-1">Opening (Unit)</p>
+                      <p className="text-lg font-bold text-gray-700">{item.openingBalanceUnit}</p>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <p className="text-xs text-gray-500 mb-1">Opening (Pkg)</p>
+                      <p className="text-lg font-bold text-gray-700">{item.openingBalancePackage}</p>
+                    </div>
+                    
+                    {/* Count - Editable in Edit Mode */}
+                    <div className="bg-blue-50 rounded-lg p-3">
+                      <p className="text-xs text-blue-600 mb-1">Count (Unit)</p>
+                      {isEditMode ? (
+                        <Input
+                          type="number"
+                          min="0"
+                          value={getDisplayValue(item._id, "countedUnit")}
+                          onChange={(e) => handleValueChange(item._id, "countedUnit", parseInt(e.target.value) || 0)}
+                          className="h-10 text-lg font-bold text-center border-blue-200 focus-visible:ring-blue-400"
+                          onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                        />
+                      ) : (
+                        <p className="text-lg font-bold text-blue-700">{item.countedUnit}</p>
+                      )}
+                    </div>
+                    <div className="bg-blue-50 rounded-lg p-3">
+                      <p className="text-xs text-blue-600 mb-1">Count (Pkg)</p>
+                      {isEditMode ? (
+                        <Input
+                          type="number"
+                          min="0"
+                          value={getDisplayValue(item._id, "countedPackage")}
+                          onChange={(e) => handleValueChange(item._id, "countedPackage", parseInt(e.target.value) || 0)}
+                          className="h-10 text-lg font-bold text-center border-blue-200 focus-visible:ring-blue-400"
+                          onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                        />
+                      ) : (
+                        <p className="text-lg font-bold text-blue-700">{item.countedPackage}</p>
+                      )}
+                    </div>
+                    
+                    {/* Closing Balance */}
+                    <div className="bg-green-50 rounded-lg p-3">
+                      <p className="text-xs text-green-600 mb-1">Closing (Unit)</p>
+                      <p className="text-lg font-bold text-green-700">{getDisplayValue(item._id, "countedUnit")}</p>
+                    </div>
+                    <div className="bg-green-50 rounded-lg p-3">
+                      <p className="text-xs text-green-600 mb-1">Closing (Pkg)</p>
+                      <p className="text-lg font-bold text-green-700">{getDisplayValue(item._id, "countedPackage")}</p>
+                    </div>
+                  </div>
+                </div>
               ))}
-            </TableBody>
-          </Table>
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden md:block bg-white rounded-lg border shadow-sm">
+              <Table>
+                <TableHeader className="bg-muted/50 sticky top-0">
+                  <TableRow>
+                    <TableHead className="font-semibold pl-4">Item</TableHead>
+                    <TableHead className="font-semibold text-center w-[130px] bg-gray-50/50">Opening (Unit)</TableHead>
+                    <TableHead className="font-semibold text-center w-[130px] bg-gray-50/50">Opening (Pkg)</TableHead>
+                    <TableHead className="font-semibold text-center w-[130px] bg-blue-50/50">Count Unit</TableHead>
+                    <TableHead className="font-semibold text-center w-[130px] bg-blue-50/50">Count Pkg</TableHead>
+                    <TableHead className="font-semibold text-center w-[130px] bg-green-50/50">Closing (Unit)</TableHead>
+                    <TableHead className="font-semibold text-center w-[130px] bg-green-50/50">Closing (Pkg)</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paginatedItems.map((item) => (
+                    <TableRow key={item._id}>
+                      <TableCell className="font-medium pl-4">
+                        <Link href={`/admin/items/${item._id}`} className="hover:underline hover:text-primary">
+                          {item.item}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="text-center font-medium text-gray-600 bg-gray-50/30">
+                        {item.openingBalanceUnit}
+                      </TableCell>
+                      <TableCell className="text-center font-medium text-gray-600 bg-gray-50/30">
+                        {item.openingBalancePackage}
+                      </TableCell>
+                      <TableCell className="text-center bg-blue-50/20">
+                        {isEditMode ? (
+                          <Input
+                            type="number"
+                            min="0"
+                            value={getDisplayValue(item._id, "countedUnit")}
+                            onChange={(e) => handleValueChange(item._id, "countedUnit", parseInt(e.target.value) || 0)}
+                            className="w-20 mx-auto text-center h-8 border-blue-200 focus-visible:ring-blue-400"
+                            onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                          />
+                        ) : (
+                          <span>{item.countedUnit}</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center bg-blue-50/20">
+                        {isEditMode ? (
+                          <Input
+                            type="number"
+                            min="0"
+                            value={getDisplayValue(item._id, "countedPackage")}
+                            onChange={(e) => handleValueChange(item._id, "countedPackage", parseInt(e.target.value) || 0)}
+                            className="w-20 mx-auto text-center h-8 border-blue-200 focus-visible:ring-blue-400"
+                            onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                          />
+                        ) : (
+                          <span>{item.countedPackage}</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center font-medium text-gray-700 bg-green-50/20">
+                        {getDisplayValue(item._id, "countedUnit")}
+                      </TableCell>
+                      <TableCell className="text-center font-medium text-gray-700 bg-green-50/20">
+                        {getDisplayValue(item._id, "countedPackage")}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
         )}
       </div>
       
       {/* Pagination Controls */}
       {!loading && filteredItems.length > 0 && (
-              <div className="flex-none flex items-center justify-end space-x-2 p-2 border-t bg-white z-20">
-                <div className="flex-1 text-sm text-muted-foreground">
-                  Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredItems.length)} of {filteredItems.length} entries
-                </div>
-                <div className="space-x-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-                    disabled={currentPage === 1}
-                    className="h-8"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                    Previous
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-                    disabled={currentPage === totalPages}
-                    className="h-8"
-                  >
-                    Next
-                    <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            )}
+        <div className="flex-none flex items-center justify-between p-3 border-t bg-white">
+          <div className="text-xs text-muted-foreground">
+            {(currentPage - 1) * itemsPerPage + 1}-{Math.min(currentPage * itemsPerPage, filteredItems.length)} of {filteredItems.length}
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              <span className="hidden sm:inline ml-1">Previous</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+              disabled={currentPage === totalPages}
+            >
+              <span className="hidden sm:inline mr-1">Next</span>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Location Selector Dialog */}
       <Dialog open={isLocationSelectorOpen} onOpenChange={setIsLocationSelectorOpen}>

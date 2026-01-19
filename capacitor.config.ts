@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'com.hamptoninn.app',
+  appId: 'com.hamptoninn.manager',
   appName: 'Hampton Inn',
   webDir: 'out',
   server: {

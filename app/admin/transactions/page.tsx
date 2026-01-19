@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRef } from "react";
-import { Loader2, ChevronRight, Search, Pencil, Trash2, MoreHorizontal } from "lucide-react";
+import { Loader2, ChevronRight, Search, Pencil, Trash2, MoreHorizontal, Calendar as CalendarIcon, Filter, X } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 import { format } from "date-fns";
 
@@ -75,6 +87,8 @@ export default function TransactionsPage() {
   const [locations, setLocations] = useState<Record<string, string>>({});
   const [totalStockMap, setTotalStockMap] = useState<Record<string, { totalUnit: number; totalPackage: number }>>({});
   const [searchQuery, setSearchQuery] = useState("");
+  const [filterLocation, setFilterLocation] = useState("ALL");
+  const [dateRange, setDateRange] = useState<{ start: string; end: string }>({ start: "", end: "" });
   
   // Infinite Scroll state
   const [visibleCount, setVisibleCount] = useState(20);
@@ -253,10 +267,15 @@ export default function TransactionsPage() {
       const locName = locations[t.location] || "Unknown Location";
       const query = searchQuery.toLowerCase();
       
-      return (
-          itemName.toLowerCase().includes(query) ||
-          locName.toLowerCase().includes(query)
-      );
+      const matchesQuery = itemName.toLowerCase().includes(query) || locName.toLowerCase().includes(query);
+      
+      const matchesLocation = filterLocation === "ALL" || t.location === filterLocation;
+      
+      let matchesDate = true;
+      if (dateRange.start && t.date < dateRange.start) matchesDate = false;
+      if (dateRange.end && t.date > dateRange.end) matchesDate = false;
+
+      return matchesQuery && matchesLocation && matchesDate;
   });
 
   // Infinite Scroll Handler
@@ -281,31 +300,169 @@ export default function TransactionsPage() {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="flex-none h-[6%] min-h-[50px] border-b flex items-center justify-between gap-4 px-4 bg-white z-20">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground mr-4">
-          <Link href="/" className="hover:text-primary hover:underline">Home</Link>
-          <ChevronRight className="h-4 w-4" />
-          <Link href="/admin" className="hover:text-primary hover:underline">Admin</Link>
-          <ChevronRight className="h-4 w-4" />
-          <span className="font-medium text-foreground">Transactions</span>
+      <div className="flex-none min-h-[50px] border-b bg-white z-20">
+        
+        {/* Desktop Header */}
+        <div className="hidden md:flex items-center justify-between gap-4 px-4 py-3 h-full">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground mr-4">
+            <Link href="/" className="hover:text-primary hover:underline">Home</Link>
+            <ChevronRight className="h-4 w-4" />
+            <Link href="/admin" className="hover:text-primary hover:underline">Admin</Link>
+            <ChevronRight className="h-4 w-4" />
+            <span className="font-medium text-foreground">Transactions</span>
+            </div>
+
+            {selectedIds.size > 0 && (
+                <Button variant="destructive" size="sm" onClick={handleDeleteSelected}>
+                    Delete ({selectedIds.size})
+                </Button>
+            )}
+
+            <div className="flex flex-1 justify-end gap-2 items-center">
+                
+                {/* Location Filter */}
+                <Select value={filterLocation} onValueChange={setFilterLocation}>
+                    <SelectTrigger className="w-[180px] h-8">
+                        <SelectValue placeholder="All Locations" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="ALL">All Locations</SelectItem>
+                        {Object.entries(locations).map(([id, name]) => (
+                            <SelectItem key={id} value={id}>{name}</SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+
+                {/* Date Filter */}
+                <Popover>
+                    <PopoverTrigger asChild>
+                        <Button variant="outline" size="sm" className="h-8 border-dashed">
+                            <CalendarIcon className="h-4 w-4 mr-2" />
+                            {dateRange.start ? (
+                                <>
+                                    {dateRange.start} {dateRange.end ? ` - ${dateRange.end}` : ""}
+                                </>
+                            ) : "Date Range"}
+                        </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-80 p-4" align="end">
+                        <div className="grid gap-4">
+                            <div className="space-y-2">
+                                <h4 className="font-medium leading-none">Filter by Date</h4>
+                                <p className="text-sm text-muted-foreground">Select date range for transactions.</p>
+                            </div>
+                            <div className="grid gap-2">
+                                <div className="grid grid-cols-3 items-center gap-4">
+                                    <Label htmlFor="start">Start</Label>
+                                    <Input id="start" type="date" className="col-span-2 h-8" value={dateRange.start} onChange={(e) => setDateRange({...dateRange, start: e.target.value})} />
+                                </div>
+                                <div className="grid grid-cols-3 items-center gap-4">
+                                    <Label htmlFor="end">End</Label>
+                                    <Input id="end" type="date" className="col-span-2 h-8" value={dateRange.end} onChange={(e) => setDateRange({...dateRange, end: e.target.value})} />
+                                </div>
+                                {(dateRange.start || dateRange.end) && (
+                                    <Button variant="ghost" size="sm" onClick={() => setDateRange({ start: "", end: "" })} className="w-full">
+                                        Clear Filter
+                                    </Button>
+                                )}
+                            </div>
+                        </div>
+                    </PopoverContent>
+                </Popover>
+
+                {/* Search Bar */}
+                <div className="relative w-64">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        type="search"
+                        placeholder="Search..."
+                        className="w-full bg-background pl-8 h-8 text-sm"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                </div>
+            </div>
         </div>
 
-        {selectedIds.size > 0 && (
-             <Button variant="destructive" size="sm" onClick={handleDeleteSelected}>
-                Delete ({selectedIds.size})
-             </Button>
-        )}
+        {/* Mobile Header */}
+        <div className="md:hidden flex flex-col gap-3 p-3">
+            {/* Row 1: Breadcrumbs & Search */}
+            <div className="flex items-center justify-between gap-2">
+                 <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Link href="/admin" className="hover:text-foreground">Admin</Link>
+                    <ChevronRight className="h-3 w-3" />
+                    <span className="font-medium text-foreground">Transactions</span>
+                </div>
+                <div className="relative w-40">
+                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                    <Input
+                        type="search"
+                        placeholder="Search..."
+                        className="w-full bg-background pl-7 h-8 text-xs"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                </div>
+            </div>
 
-        {/* Search Bar */}
-        <div className="relative max-w-sm w-full md:w-64">
-             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-             <Input
-               type="search"
-               placeholder="Search transactions..."
-               className="w-full bg-background pl-8 h-8 text-sm"
-               value={searchQuery}
-               onChange={(e) => setSearchQuery(e.target.value)}
-             />
+            {/* Row 2: Filters & Actions */}
+            <div className="flex items-center gap-2">
+                 {selectedIds.size > 0 && (
+                    <Button variant="destructive" size="icon" className="h-9 w-9 shrink-0" onClick={handleDeleteSelected}>
+                        <Trash2 className="h-4 w-4" />
+                    </Button>
+                )}
+                
+                {/* Location Icon Selector */}
+                <div className="flex-1">
+                     <Select value={filterLocation} onValueChange={setFilterLocation}>
+                        <SelectTrigger className="w-full h-9 text-xs">
+                             <Filter className="h-3 w-3 mr-2" />
+                            <SelectValue placeholder="Loc" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="ALL">All Locations</SelectItem>
+                            {Object.entries(locations).map(([id, name]) => (
+                                <SelectItem key={id} value={id}>{name}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                 {/* Date Icon Range */}
+                 <div className="flex-1">
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button variant="outline" className="w-full h-9 justify-start text-left font-normal px-2 text-xs">
+                                <CalendarIcon className="mr-2 h-3 w-3" />
+                                {dateRange.start ? (
+                                    <span className="truncate">
+                                        {dateRange.start}
+                                        {dateRange.end ? `:${dateRange.end.slice(5)}` : ""}
+                                    </span>
+                                ) : <span>Date</span>}
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-80 p-4" align="start">
+                             <div className="grid gap-2">
+                                <div className="grid grid-cols-3 items-center gap-4">
+                                    <Label htmlFor="m-start">Start</Label>
+                                    <Input id="m-start" type="date" className="col-span-2 h-8" value={dateRange.start} onChange={(e) => setDateRange({...dateRange, start: e.target.value})} />
+                                </div>
+                                <div className="grid grid-cols-3 items-center gap-4">
+                                    <Label htmlFor="m-end">End</Label>
+                                    <Input id="m-end" type="date" className="col-span-2 h-8" value={dateRange.end} onChange={(e) => setDateRange({...dateRange, end: e.target.value})} />
+                                </div>
+                                {(dateRange.start || dateRange.end) && (
+                                    <Button variant="ghost" size="sm" onClick={() => setDateRange({ start: "", end: "" })} className="w-full">
+                                        Clear
+                                    </Button>
+                                )}
+                            </div>
+                        </PopoverContent>
+                    </Popover>
+                 </div>
+            </div>
         </div>
       </div>
 

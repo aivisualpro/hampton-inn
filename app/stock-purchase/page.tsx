@@ -827,26 +827,45 @@ function StockPurchaseContent() {
 
       {/* Location Selector Dialog */}
       <Dialog open={isLocationSelectorOpen} onOpenChange={setIsLocationSelectorOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-[400px] max-h-[80vh]">
           <DialogHeader>
             <DialogTitle>Select Location</DialogTitle>
           </DialogHeader>
-          <div className="space-y-2 max-h-[60vh] overflow-auto">
-            {userLocations.map((location) => (
-              <Button
-                key={location._id}
-                variant={selectedLocation?._id === location._id ? "default" : "outline"}
-                className="w-full justify-start h-auto py-3"
-                onClick={() => handleLocationSelect(location)}
-              >
-                <div className="flex flex-col items-start">
-                  <span className="font-medium">{location.name}</span>
-                  {location.description && (
-                    <span className="text-xs text-muted-foreground">{location.description}</span>
-                  )}
-                </div>
-              </Button>
-            ))}
+          <div className="py-2">
+            {loading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : userLocations.length === 0 ? (
+              <div className="text-center text-muted-foreground py-8">
+                No locations assigned to you.
+              </div>
+            ) : (
+              <div className="space-y-1 max-h-[400px] overflow-y-auto">
+                {userLocations.map((location) => (
+                  <div
+                    key={location._id}
+                    className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-muted transition-colors ${
+                      selectedLocation?._id === location._id ? "bg-primary/10 border border-primary/30" : ""
+                    }`}
+                    onClick={() => handleLocationSelect(location)}
+                  >
+                    <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center shrink-0">
+                      <MapPin className="h-5 w-5 text-muted-foreground" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{location.name}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {location.items?.length || 0} items
+                      </p>
+                    </div>
+                    {selectedLocation?._id === location._id && (
+                      <div className="h-2 w-2 rounded-full bg-primary shrink-0" />
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </DialogContent>
       </Dialog>

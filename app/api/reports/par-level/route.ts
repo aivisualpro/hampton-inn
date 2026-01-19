@@ -30,10 +30,16 @@ export async function GET() {
         // Group by Item + Location, get the latest transaction's countedUnit
         const stockData = await Transaction.aggregate([
             { $match: { item: { $in: itemIds } } },
-            { $sort: { date: -1 } },
             { $group: {
                 _id: { item: "$item", location: "$location" },
-                latestCount: { $first: "$countedUnit" }
+                latestCount: { 
+                    $sum: { 
+                        $subtract: [ 
+                            { $add: [ { $ifNull: ["$purchasedUnit", 0] }, { $ifNull: ["$soakUnit", 0] } ] }, 
+                            { $ifNull: ["$consumedUnit", 0] } 
+                        ] 
+                    } 
+                }
             }}
         ]);
         

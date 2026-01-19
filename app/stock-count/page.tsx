@@ -420,9 +420,51 @@ function StockCountContent() {
     }));
   };
 
+  const getPackageSize = (pkgStr?: string) => {
+      if (!pkgStr) return 1;
+      // Extract first number found in string, e.g. "Case of 12" -> 12
+      const match = pkgStr.match(/(\d+)/);
+      return match ? parseInt(match[0], 10) : 1;
+  };
+
   // Save all edited values
   const handleSave = async () => {
     if (!selectedLocation || !selectedDate) return;
+
+    // VALIDATION STEP
+    const errors: string[] = [];
+    
+    Object.entries(editedValues).forEach(([itemId, values]) => {
+        const itemOpening = openingBalancesMap[itemId];
+        const openingUnit = itemOpening?.openingBalance || 0;
+        const openingPackage = itemOpening?.openingBalancePackage || 0;
+        
+        const valCountedUnit = values.countedUnit === "" ? 0 : Number(values.countedUnit);
+        const valCountedPackage = values.countedPackage === "" ? 0 : Number(values.countedPackage);
+
+        // Skip if everything 0
+        if (openingUnit === 0 && openingPackage === 0 && valCountedUnit === 0 && valCountedPackage === 0) return;
+
+        const itemDef = allItems.find(i => i._id === itemId);
+        const pkgSize = getPackageSize(itemDef?.package);
+        
+        const totalOpening = (openingPackage * pkgSize) + openingUnit;
+        const totalCounted = (valCountedPackage * pkgSize) + valCountedUnit;
+
+        // If Opening > 0 and Count > Opening -> Error
+        if (totalOpening > 0 && totalCounted > totalOpening) {
+            errors.push(`${itemDef?.item || "Item"}: Count (${totalCounted}) exceeds Opening (${totalOpening}). Please add a Purchase.`);
+        }
+    });
+
+    if (errors.length > 0) {
+        toast({
+            variant: "destructive",
+            title: "Validation Error",
+            description: errors[0] // Show first error
+        });
+        return;
+    }
 
     // 1. Optimistic Update
     const previousTransactions = [...transactions];
@@ -430,16 +472,9 @@ function StockCountContent() {
     
     // We update local state to reflect changes immediately
     Object.entries(editedValues).forEach(([itemId, values]) => {
-         const itemOpening = openingBalancesMap[itemId];
-         const openingUnit = itemOpening?.openingBalance || 0;
-         const openingPackage = itemOpening?.openingBalancePackage || 0;
-         
          const valCountedUnit = values.countedUnit === "" ? 0 : Number(values.countedUnit);
          const valCountedPackage = values.countedPackage === "" ? 0 : Number(values.countedPackage);
 
-         // Skip empty
-         if (openingUnit === 0 && openingPackage === 0 && valCountedUnit === 0 && valCountedPackage === 0) return;
-         
          // Find existing transaction in our local list
          const existingIndex = updatedTransactions.findIndex(t => t.item === itemId);
          
@@ -468,10 +503,9 @@ function StockCountContent() {
         title: "Updates applied", 
         description: "Syncing with database...",
     });
-
+    
     setSaving(true);
     try {
-      // Save each edited item as a transaction
       const savePromises = Object.entries(editedValues)
         .map(([itemId, values]) => {
            const itemOpening = openingBalancesMap[itemId];
@@ -485,8 +519,26 @@ function StockCountContent() {
                return null;
            }
 
-        const consumedUnit = openingUnit - valCountedUnit;
-        const consumedPackage = openingPackage - valCountedPackage;
+           const itemDef = allItems.find(i => i._id === itemId);
+           const pkgSize = getPackageSize(itemDef?.package);
+           const totalOpening = (openingPackage * pkgSize) + openingUnit;
+           
+           let consumedUnit = 0;
+           let consumedPackage = 0;
+           let purchasedUnit = 0;
+           let purchasedPackage = 0;
+
+           if (totalOpening === 0) {
+               // Initial Stock -> Treat as Purchase/Found
+               purchasedUnit = valCountedUnit;
+               purchasedPackage = valCountedPackage;
+               consumedUnit = 0;
+               consumedPackage = 0;
+           } else {
+               // Regular Count -> Treat as Consumption (Difference)
+               consumedUnit = openingUnit - valCountedUnit;
+               consumedPackage = openingPackage - valCountedPackage;
+           }
 
         return fetch("/api/transactions", {
           method: "POST",
@@ -499,10 +551,16 @@ function StockCountContent() {
             countedPackage: valCountedPackage,
             consumedUnit: consumedUnit,
             consumedPackage: consumedPackage,
+            purchasedUnit: purchasedUnit,
+            purchasedPackage: purchasedPackage,
           }),
         });
       })
       .filter(p => p !== null) as Promise<Response>[];
+
+      await Promise.all(savePromises);
+      // ... same as before
+
 
       await Promise.all(savePromises);
 
@@ -777,10 +835,12 @@ function StockCountContent() {
                       <p className="text-xs text-gray-500 mb-1">Opening (Unit)</p>
                       <p className="text-lg font-bold text-gray-700">{item.openingBalanceUnit}</p>
                     </div>
+                    {(!!item.package && item.package !== "0") && (
                     <div className="bg-gray-50 rounded-lg p-3">
                       <p className="text-xs text-gray-500 mb-1">Opening (Pkg)</p>
                       <p className="text-lg font-bold text-gray-700">{item.openingBalancePackage}</p>
                     </div>
+                    )}
                     
                     {/* Count - Editable in Edit Mode */}
                     <div className="bg-blue-50 rounded-lg p-3">
@@ -798,6 +858,7 @@ function StockCountContent() {
                         <p className="text-lg font-bold text-blue-700">{item.countedUnit}</p>
                       )}
                     </div>
+                    {(!!item.package && item.package !== "0") && (
                     <div className="bg-blue-50 rounded-lg p-3">
                       <p className="text-xs text-blue-600 mb-1">Count (Pkg)</p>
                       {isEditMode ? (
@@ -813,16 +874,19 @@ function StockCountContent() {
                         <p className="text-lg font-bold text-blue-700">{item.countedPackage}</p>
                       )}
                     </div>
+                    )}
                     
                     {/* Closing Balance */}
                     <div className="bg-green-50 rounded-lg p-3">
                       <p className="text-xs text-green-600 mb-1">Closing (Unit)</p>
                       <p className="text-lg font-bold text-green-700">{getDisplayValue(item._id, "countedUnit")}</p>
                     </div>
+                    {(!!item.package && item.package !== "0") && (
                     <div className="bg-green-50 rounded-lg p-3">
                       <p className="text-xs text-green-600 mb-1">Closing (Pkg)</p>
                       <p className="text-lg font-bold text-green-700">{getDisplayValue(item._id, "countedPackage")}</p>
                     </div>
+                    )}
                   </div>
                 </div>
               ))}
@@ -854,7 +918,7 @@ function StockCountContent() {
                         {item.openingBalanceUnit}
                       </TableCell>
                       <TableCell className="text-center font-medium text-gray-600 bg-gray-50/30">
-                        {item.openingBalancePackage}
+                        {(!!item.package && item.package !== "0") ? item.openingBalancePackage : "-"}
                       </TableCell>
                       <TableCell className="text-center bg-blue-50/20">
                         {isEditMode ? (
@@ -871,7 +935,9 @@ function StockCountContent() {
                         )}
                       </TableCell>
                       <TableCell className="text-center bg-blue-50/20">
-                        {isEditMode ? (
+                        {!(!!item.package && item.package !== "0") ? (
+                            <span className="text-muted-foreground">-</span>
+                        ) : isEditMode ? (
                           <Input
                             type="number"
                             min="0"
@@ -888,7 +954,7 @@ function StockCountContent() {
                         {getDisplayValue(item._id, "countedUnit") || ""}
                       </TableCell>
                       <TableCell className="text-center font-medium text-gray-700 bg-green-50/20">
-                        {getDisplayValue(item._id, "countedPackage") || ""}
+                        {(!!item.package && item.package !== "0") ? (getDisplayValue(item._id, "countedPackage") || "") : "-"}
                       </TableCell>
                     </TableRow>
                   ))}

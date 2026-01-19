@@ -711,8 +711,13 @@ function StockPurchaseContent() {
                         <p className="text-sm font-bold text-gray-700">{item.openingBalanceUnit}</p>
                       </div>
                       <div className="bg-gray-50 rounded-lg p-2 text-center">
+                        <p className="text-sm font-bold text-gray-700">{item.openingBalanceUnit}</p>
+                      </div>
+                      {(!!item.package && item.package !== "0") && (
+                      <div className="bg-gray-50 rounded-lg p-2 text-center">
                         <p className="text-sm font-bold text-gray-700">{item.openingBalancePackage}</p>
                       </div>
+                      )}
                     </div>
                     
                     {/* Purchased */}
@@ -732,6 +737,7 @@ function StockPurchaseContent() {
                           <p className="text-sm font-bold text-blue-700 text-center py-1">{purchasedUnit === 0 ? "" : purchasedUnit}</p>
                         )}
                       </div>
+                      {(!!item.package && item.package !== "0") && (
                       <div className="bg-blue-50 rounded-lg p-1">
                         {isEditMode ? (
                           <Input
@@ -746,6 +752,7 @@ function StockPurchaseContent() {
                           <p className="text-sm font-bold text-blue-700 text-center py-1">{purchasedPackage === 0 ? "" : purchasedPackage}</p>
                         )}
                       </div>
+                      )}
                     </div>
                     
                     {/* Closing */}
@@ -754,9 +761,11 @@ function StockPurchaseContent() {
                       <div className="bg-green-50 rounded-lg p-2 text-center">
                         <p className="text-sm font-bold text-green-700">{closingUnit}</p>
                       </div>
+                      {(!!item.package && item.package !== "0") && (
                       <div className="bg-green-50 rounded-lg p-2 text-center">
                         <p className="text-sm font-bold text-green-700">{closingPackage}</p>
                       </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -795,7 +804,7 @@ function StockPurchaseContent() {
                           {item.openingBalanceUnit}
                         </TableCell>
                         <TableCell className="text-center font-medium text-gray-600 bg-gray-50/30">
-                          {item.openingBalancePackage}
+                          {(!!item.package && item.package !== "0") ? item.openingBalancePackage : "-"}
                         </TableCell>
                         <TableCell className="text-center bg-blue-50/20">
                           {isEditMode ? (
@@ -812,7 +821,9 @@ function StockPurchaseContent() {
                           )}
                         </TableCell>
                         <TableCell className="text-center bg-blue-50/20">
-                          {isEditMode ? (
+                          {!(!!item.package && item.package !== "0") ? (
+                              <span className="text-muted-foreground">-</span>
+                          ) : isEditMode ? (
                             <Input
                               type="number"
                               min="0"
@@ -829,7 +840,7 @@ function StockPurchaseContent() {
                           {closingUnit}
                         </TableCell>
                         <TableCell className="text-center font-bold text-green-700 bg-green-50/20">
-                          {closingPackage}
+                          {(!!item.package && item.package !== "0") ? closingPackage : "-"}
                         </TableCell>
                       </TableRow>
                     );

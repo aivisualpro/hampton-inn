@@ -21,29 +21,39 @@ export async function GET(request: Request) {
     }
 
     pipeline.push(
-      // 1. Sort by date descending to get latest first
-      { $sort: { date: -1, createdAt: -1 } },
-      
-      // 2. Group by item and location to pick the latest transaction for each pair
+      // Group by item and location to sum up the deltas
       {
         $group: {
           _id: { item: "$item", location: "$location" },
-          latestCountedUnit: { $first: "$countedUnit" },
-          latestCountedPackage: { $first: "$countedPackage" },
+          totalUnit: { 
+              $sum: { 
+                  $subtract: [ 
+                      { $add: [ { $ifNull: ["$purchasedUnit", 0] }, { $ifNull: ["$soakUnit", 0] } ] }, 
+                      { $ifNull: ["$consumedUnit", 0] } 
+                  ] 
+              } 
+          },
+          totalPackage: { 
+              $sum: { 
+                  $subtract: [ 
+                      { $add: [ { $ifNull: ["$purchasedPackage", 0] }, { $ifNull: ["$soakPackage", 0] } ] }, 
+                      { $ifNull: ["$consumedPackage", 0] } 
+                  ] 
+              } 
+          },
         },
       },
       
-      // 3. Group by item to sum up the counts across all locations
-      // (If location filter is applied, this effectively just reformats the single result per item)
+      // Group by item to sum up across locations
       {
         $group: {
           _id: "$_id.item",
-          totalUnit: { $sum: "$latestCountedUnit" },
-          totalPackage: { $sum: "$latestCountedPackage" },
+          totalUnit: { $sum: "$totalUnit" },
+          totalPackage: { $sum: "$totalPackage" },
         },
       },
       
-      // 4. Project fields for cleaner output
+      // Project fields
       {
         $project: {
           item: "$_id",

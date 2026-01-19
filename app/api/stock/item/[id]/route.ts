@@ -23,15 +23,26 @@ export async function GET(
       // 1. Match transactions for this specific item (match string against string)
       { $match: { item: id } },
 
-      // 2. Sort by date descending to get latest first
-      { $sort: { date: -1, createdAt: -1 } },
-      
-      // 3. Group by location to pick the latest transaction for each location
+      // 2. Group by location to sum up the deltas
       {
         $group: {
           _id: "$location", // Group by location ID (string)
-          latestCountedUnit: { $first: "$countedUnit" },
-          latestCountedPackage: { $first: "$countedPackage" },
+          totalUnit: { 
+              $sum: { 
+                  $subtract: [ 
+                      { $add: [ { $ifNull: ["$purchasedUnit", 0] }, { $ifNull: ["$soakUnit", 0] } ] }, 
+                      { $ifNull: ["$consumedUnit", 0] } 
+                  ] 
+              } 
+          },
+          totalPackage: { 
+              $sum: { 
+                  $subtract: [ 
+                      { $add: [ { $ifNull: ["$purchasedPackage", 0] }, { $ifNull: ["$soakPackage", 0] } ] }, 
+                      { $ifNull: ["$consumedPackage", 0] } 
+                  ] 
+              } 
+          },
           locationId: { $first: "$location" }
         },
       },
@@ -61,8 +72,8 @@ export async function GET(
         $project: {
           locationName: "$locationDetails.name",
           locationId: "$locationId",
-          totalUnit: "$latestCountedUnit",
-          totalPackage: "$latestCountedPackage",
+          totalUnit: 1,
+          totalPackage: 1,
           _id: 0,
         },
       },

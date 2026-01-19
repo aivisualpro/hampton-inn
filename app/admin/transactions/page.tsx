@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRef } from "react";
-import { Loader2, ChevronRight, Search, Pencil, Trash2, MoreHorizontal, Calendar as CalendarIcon, Filter, X } from "lucide-react";
+import { Loader2, ChevronRight, Search, Pencil, Trash2, MoreHorizontal, Calendar as CalendarIcon, Filter, X, Save } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -90,6 +90,10 @@ export default function TransactionsPage() {
   const [filterLocation, setFilterLocation] = useState("ALL");
   const [dateRange, setDateRange] = useState<{ start: string; end: string }>({ start: "", end: "" });
   
+  // Mass Edit State
+  const [isMassEditMode, setIsMassEditMode] = useState(false);
+  const [massEditedTransactions, setMassEditedTransactions] = useState<Record<string, Partial<Transaction>>>({});
+  
   // Infinite Scroll state
   const [visibleCount, setVisibleCount] = useState(20);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -110,6 +114,59 @@ export default function TransactionsPage() {
     if (next.has(id)) next.delete(id);
     else next.add(id);
     setSelectedIds(next);
+  };
+
+  const toggleMassEdit = () => {
+      if (isMassEditMode) {
+          setIsMassEditMode(false);
+          setMassEditedTransactions({});
+      } else {
+          setIsMassEditMode(true);
+      }
+  };
+
+  const handleMassEditChange = (id: string, field: keyof Transaction, value: any) => {
+      setMassEditedTransactions(prev => ({
+          ...prev,
+          [id]: {
+              ...prev[id],
+              [field]: value
+          }
+      }));
+  };
+
+  const saveMassEdit = async () => {
+      const updates = Object.entries(massEditedTransactions).map(([id, changes]) => ({
+          _id: id,
+          ...changes
+      }));
+
+      if (updates.length === 0) {
+          setIsMassEditMode(false);
+          return;
+      }
+
+      setSaveLoading(true);
+      try {
+          // Send parallel updates (since API might not support bulk)
+          await Promise.all(updates.map(u => 
+              fetch(`/api/transactions/${u._id}`, {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify(u)
+              })
+          ));
+          
+          await fetchData(); // Refresh all data
+          setIsMassEditMode(false);
+          setMassEditedTransactions({});
+          toast({ title: "Updated", description: "Transactions updated successfully." });
+      } catch (e) {
+          console.error(e);
+          toast({ variant: "destructive", title: "Error", description: "Failed to save changes." });
+      } finally {
+          setSaveLoading(false);
+      }
   };
 
   const toggleAll = () => {
@@ -318,6 +375,24 @@ export default function TransactionsPage() {
                 </Button>
             )}
 
+            {/* Mass Edit Actions Desktop */}
+            <div className="flex items-center gap-1">
+                 {isMassEditMode ? (
+                    <>
+                        <Button variant="outline" size="icon" onClick={toggleMassEdit} disabled={saveLoading} className="h-8 w-8 text-red-600 border-red-200 bg-red-50">
+                            <X className="h-4 w-4" />
+                        </Button>
+                        <Button size="icon" onClick={saveMassEdit} disabled={saveLoading} className="h-8 w-8 bg-green-600 hover:bg-green-700 text-white">
+                            {saveLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                        </Button>
+                    </>
+                 ) : (
+                    <Button variant="ghost" size="icon" onClick={toggleMassEdit} className="h-8 w-8">
+                        <Pencil className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                 )}
+            </div>
+
             <div className="flex flex-1 justify-end gap-2 items-center">
                 
                 {/* Location Filter */}
@@ -393,15 +468,32 @@ export default function TransactionsPage() {
                     <ChevronRight className="h-3 w-3" />
                     <span className="font-medium text-foreground">Transactions</span>
                 </div>
-                <div className="relative w-40">
-                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
-                    <Input
-                        type="search"
-                        placeholder="Search..."
-                        className="w-full bg-background pl-7 h-8 text-xs"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                    />
+                <div className="flex items-center gap-2">
+                    <div className="relative w-32">
+                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                        <Input
+                            type="search"
+                            placeholder="Search..."
+                            className="w-full bg-background pl-7 h-8 text-xs"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                    </div>
+                    {/* Mobile Quick Edit Toggle */}
+                    {isMassEditMode ? (
+                        <>
+                            <Button variant="ghost" size="icon" onClick={toggleMassEdit} className="h-8 w-8 text-red-600">
+                                <X className="h-4 w-4" />
+                            </Button>
+                            <Button size="icon" onClick={saveMassEdit} className="h-8 w-8 bg-green-600 text-white">
+                                {saveLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                            </Button>
+                        </>
+                    ) : (
+                        <Button variant="ghost" size="icon" onClick={toggleMassEdit} className="h-8 w-8">
+                            <Pencil className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                    )}
                 </div>
             </div>
 
@@ -474,21 +566,32 @@ export default function TransactionsPage() {
             onScroll={handleScroll}
           >
 
-            {/* Mobile Card View */}
             <div className="md:hidden p-2 space-y-2">
                 {displayedTransactions.map(t => {
+                     // Merge mass edit values
+                     const overrides = massEditedTransactions[t._id] || {};
+                     const currentT = { ...t, ...overrides };
+                     
+                     // Recalculate opening for display based on current values?
+                     // Logic: Opening = Closing(Counted) - Purch - Soak + Consumed
+                     // But strictly, Opening is fixed from prev day. 
+                     // Let's just use original opening calculation for now or user edit consistency?
+                     // Ideally we just show values. 
                      const opening = (t.countedUnit || 0) - (t.purchasedUnit || 0) - (t.soakUnit || 0) + (t.consumedUnit || 0); 
+                     
                      return (
                         <div key={t._id} className="bg-white border rounded-lg p-3 shadow-sm text-xs relative">
                             {/* Selection Checkbox Mobile? Maybe skip for density, or add top right */}
-                            <div className="absolute top-3 right-3 flex gap-2">
-                                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleEditClick(t)}>
-                                    <Pencil className="h-3 w-3" />
-                                </Button>
-                                <Button variant="ghost" size="icon" className="h-6 w-6 text-red-600" onClick={() => handleDeleteClick(t._id)}>
-                                    <Trash2 className="h-3 w-3" />
-                                </Button>
-                            </div>
+                            {!isMassEditMode && (
+                                <div className="absolute top-3 right-3 flex gap-2">
+                                    <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => handleEditClick(t)}>
+                                        <Pencil className="h-3 w-3" />
+                                    </Button>
+                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-red-600" onClick={() => handleDeleteClick(t._id)}>
+                                        <Trash2 className="h-3 w-3" />
+                                    </Button>
+                                </div>
+                            )}
 
                             <div className="pr-16 mb-2">
                                 <div className="font-semibold text-sm">{items[t.item] || t.item}</div>
@@ -502,15 +605,48 @@ export default function TransactionsPage() {
                                 </div>
                                 <div className="text-blue-600">
                                     <div className="text-[10px] text-blue-400">P/S</div>
-                                    <div className="font-mono">{(t.purchasedUnit||0)+(t.soakUnit||0) || "-"}</div>
+                                    {isMassEditMode ? (
+                                        <div className="flex flex-col gap-1">
+                                            <Input 
+                                                className="h-6 text-[10px] px-1 text-center" 
+                                                placeholder="P"
+                                                value={currentT.purchasedUnit}
+                                                onChange={(e) => handleMassEditChange(t._id, "purchasedUnit", parseInt(e.target.value)||0)}
+                                            />
+                                            <Input 
+                                                className="h-6 text-[10px] px-1 text-center" 
+                                                placeholder="S"
+                                                value={currentT.soakUnit}
+                                                onChange={(e) => handleMassEditChange(t._id, "soakUnit", parseInt(e.target.value)||0)}
+                                            />
+                                        </div>
+                                    ) : (
+                                        <div className="font-mono">{(currentT.purchasedUnit||0)+(currentT.soakUnit||0) || "-"}</div>
+                                    )}
                                 </div>
                                 <div className="text-red-600">
                                     <div className="text-[10px] text-red-400">C/D</div>
-                                    <div className="font-mono">{t.consumedUnit || "-"}</div>
+                                    {isMassEditMode ? (
+                                        <Input 
+                                            className="h-6 text-[10px] px-1 text-center" 
+                                            value={currentT.consumedUnit}
+                                            onChange={(e) => handleMassEditChange(t._id, "consumedUnit", parseInt(e.target.value)||0)}
+                                        />
+                                    ) : (
+                                        <div className="font-mono">{currentT.consumedUnit || "-"}</div>
+                                    )}
                                 </div>
                                 <div className="font-bold">
                                     <div className="text-[10px] text-gray-500">Close</div>
-                                    <div className="font-mono">{t.countedUnit}</div>
+                                    {isMassEditMode ? (
+                                        <Input 
+                                            className="h-6 text-[10px] px-1 text-center font-bold" 
+                                            value={currentT.countedUnit}
+                                            onChange={(e) => handleMassEditChange(t._id, "countedUnit", parseInt(e.target.value)||0)}
+                                        />
+                                    ) : (
+                                        <div className="font-mono">{currentT.countedUnit}</div>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -562,11 +698,12 @@ export default function TransactionsPage() {
                     ) : (
                         <>
                             {displayedTransactions.map((t) => {
-                                // Calculate Opening Balance
-                                // Closing(Counted) = Opening + Purchase + Soak - Consumed
-                                // Opening = Closing - Purchase - Soak + Consumed
+                                // Merge mass edit values
+                                const overrides = massEditedTransactions[t._id] || {};
+                                const currentT = { ...t, ...overrides };
+                                
                                 const opening = (t.countedUnit || 0) - (t.purchasedUnit || 0) - (t.soakUnit || 0) + (t.consumedUnit || 0);
-                                const purchSoak = (t.purchasedUnit || 0) + (t.soakUnit || 0);
+                                const purchSoak = (currentT.purchasedUnit || 0) + (currentT.soakUnit || 0);
 
                                 return (
                                 <TableRow key={t._id} className="hover:bg-muted/50 border-b">
@@ -575,18 +712,16 @@ export default function TransactionsPage() {
                                             className="rounded border-gray-300"
                                             checked={selectedIds.has(t._id)}
                                             onChange={() => toggleSelection(t._id)}
+                                            disabled={isMassEditMode}
                                         />
                                     </TableCell>
                                     <TableCell className="pl-4 font-medium text-xs whitespace-nowrap text-muted-foreground w-[100px]">
                                         {(() => {
                                             const types = [];
-                                            if ((t.soakUnit || 0) > 0) types.push("Soak Cycle");
-                                            if ((t.purchasedUnit || 0) > 0) types.push("Purchase");
-                                            if ((t.consumedUnit || 0) > 0) types.push("Daily Occupancy");
-                                            // If no specific activity but still exists, it's a Count (or if explicitly counted)
+                                            if ((currentT.soakUnit || 0) > 0) types.push("Soak Cycle");
+                                            if ((currentT.purchasedUnit || 0) > 0) types.push("Purchase");
+                                            if ((currentT.consumedUnit || 0) > 0) types.push("Daily Occupancy");
                                             if (types.length === 0) types.push("Count");
-                                            
-                                            // Prioritize display or join
                                             return types.join(", ");
                                         })()}
                                     </TableCell>
@@ -610,32 +745,63 @@ export default function TransactionsPage() {
                                         {opening}
                                     </TableCell>
                                     <TableCell className="text-center font-mono text-xs">
-                                        {t.countedUnit}
+                                        {isMassEditMode ? (
+                                            <Input 
+                                                className="h-7 w-16 mx-auto text-center" 
+                                                value={currentT.countedUnit}
+                                                onChange={(e) => handleMassEditChange(t._id, "countedUnit", parseInt(e.target.value)||0)}
+                                            />
+                                        ) : t.countedUnit}
                                     </TableCell>
                                     <TableCell className="text-center font-mono text-xs text-red-600">
-                                        {t.consumedUnit > 0 ? t.consumedUnit : "-"}
+                                         {isMassEditMode ? (
+                                            <Input 
+                                                className="h-7 w-16 mx-auto text-center" 
+                                                value={currentT.consumedUnit}
+                                                onChange={(e) => handleMassEditChange(t._id, "consumedUnit", parseInt(e.target.value)||0)}
+                                            />
+                                        ) : (t.consumedUnit > 0 ? t.consumedUnit : "-")}
                                     </TableCell>
                                     <TableCell className="text-center font-mono text-xs text-blue-600">
-                                        {purchSoak > 0 ? purchSoak : "-"}
+                                         {isMassEditMode ? (
+                                             <div className="flex flex-col gap-1 items-center">
+                                                <Input 
+                                                    className="h-7 w-16 text-center placeholder:text-gray-300" 
+                                                    placeholder="Buy"
+                                                    title="Purchased"
+                                                    value={currentT.purchasedUnit}
+                                                    onChange={(e) => handleMassEditChange(t._id, "purchasedUnit", parseInt(e.target.value)||0)}
+                                                />
+                                                <Input 
+                                                    className="h-7 w-16 text-center placeholder:text-gray-300" 
+                                                    placeholder="Soak"
+                                                    title="Soak"
+                                                    value={currentT.soakUnit}
+                                                    onChange={(e) => handleMassEditChange(t._id, "soakUnit", parseInt(e.target.value)||0)}
+                                                />
+                                             </div>
+                                        ) : (purchSoak > 0 ? purchSoak : "-")}
                                     </TableCell>
                                     <TableCell className="text-center font-mono text-xs font-bold bg-gray-50/50">
-                                        {t.countedUnit}
+                                        {currentT.countedUnit}
                                     </TableCell>
                                     <TableCell className="text-center font-mono text-xs font-bold text-green-700 bg-green-50/50">
                                         {totalStockMap[t.item]?.totalUnit || 0}
                                     </TableCell>
                                     <TableCell>
-                                        <div className="flex items-center gap-1">
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600" onClick={() => handleEditClick(t)}>
-                                                <Pencil className="h-3.5 w-3.5" />
-                                            </Button>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-red-600" onClick={() => handleDeleteClick(t._id)}>
-                                                <Trash2 className="h-3.5 w-3.5" />
-                                            </Button>
-                                        </div>
+                                        {!isMassEditMode && (
+                                            <div className="flex items-center gap-1">
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-600" onClick={() => handleEditClick(t)}>
+                                                    <Pencil className="h-3.5 w-3.5" />
+                                                </Button>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-red-600" onClick={() => handleDeleteClick(t._id)}>
+                                                    <Trash2 className="h-3.5 w-3.5" />
+                                                </Button>
+                                            </div>
+                                        )}
                                       </TableCell>
                                   </TableRow>
-                              )})}
+                                  )})}
                               {/* Loading indicator for infinite scroll if needed, though strictly we just append rows */}
                               {visibleCount < filteredTransactions.length && (
                                   <TableRow>

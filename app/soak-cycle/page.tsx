@@ -229,34 +229,23 @@ function SoakCycleContent() {
                 location: laundryLocationId,
               });
               
-              // Parallel fetch: Previous Balances + Current Transactions
-              const [openingRes, currentRes] = await Promise.all([
-                  fetch(`/api/stock/opening-balance?${params}`, { cache: "no-store" }),
-                  fetch(`/api/transactions?${params}`, { cache: "no-store" })
-              ]);
+              // Single API call for opening balances and transactions
+              const response = await fetch(`/api/stock/combined?${params}`, { cache: "no-store" });
+              const data = await response.json();
 
-              const openingBalances = await openingRes.json();
-              const transactions = await currentRes.json();
+              const openingBalances = data.openingBalances || {};
+              const transactions = data.transactions || {};
               
               setItems(currentItems => currentItems.map(item => {
-                // Find previous balance
-                let previousBalance = 0;
-                if (Array.isArray(openingBalances)) {
-                    const prevRecord = openingBalances.find((b: any) => b.item === item._id);
-                    previousBalance = prevRecord?.openingBalance || 0;
-                }
+                // Find previous balance from map
+                const previousBalance = openingBalances[item._id]?.unit || 0;
 
-                // Find current transaction values
-                let soakUnit = 0; 
-                let disposedUnit = 0;
+                // Find current transaction values from map
+                const trans = transactions[item._id];
+                const soakUnit = trans?.soakUnit || 0;
+                const disposedUnit = trans?.consumedUnit || 0;
                 
-                if (Array.isArray(transactions)) {
-                    const trans = transactions.find((t: any) => t.item === item._id);
-                    soakUnit = trans?.soakUnit || 0;
-                    disposedUnit = trans?.consumedUnit || 0;
-                }
-                
-                // Only update if changed to avoid unnecessary re-renders if we were using items in dep array (which we are not fully, just length)
+                // Only update if changed to avoid unnecessary re-renders
                 if (item.previousBalance === previousBalance && item.soakUnit === soakUnit && item.disposedUnit === disposedUnit) {
                     return item;
                 }

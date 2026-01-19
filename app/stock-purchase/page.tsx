@@ -260,9 +260,9 @@ function StockPurchaseContent() {
   // Items for current location with purchase data
   const [locationItems, setLocationItems] = useState<ItemWithPurchase[]>([]);
 
-  // Fetch purchase data when location or date changes
+  // Fetch purchase data when location or date changes - uses combined API for speed
   useEffect(() => {
-    if (!selectedLocation || !selectedDate) return;
+    if (!selectedLocation || !selectedDate || allItems.length === 0) return;
     
     // Reset edit mode when location or date changes
     setIsEditMode(false);
@@ -276,27 +276,15 @@ function StockPurchaseContent() {
           location: selectedLocation._id,
         });
         
-        const [openingRes, transRes] = await Promise.all([
-          fetch(`/api/stock/opening-balance?${params}`),
-          fetch(`/api/transactions?${params}`)
-        ]);
-        
-        const openingBalances = await openingRes.json();
-        const transactions = await transRes.json();
+        // Single API call for both opening balances and transactions
+        const response = await fetch(`/api/stock/combined?${params}`);
+        const data = await response.json();
         
         const locationItemIds = selectedLocation.items || [];
         const filteredItems = allItems.filter(item => locationItemIds.includes(item._id));
         
-        const openingMap = Array.isArray(openingBalances) 
-          ? openingBalances.reduce((acc: any, curr: any) => ({
-              ...acc, 
-              [curr.item]: { unit: curr.openingBalance || 0, package: curr.openingBalancePackage || 0 }
-            }), {})
-          : {};
-        
-        const transMap = Array.isArray(transactions)
-          ? transactions.reduce((acc: any, curr: any) => ({ ...acc, [curr.item]: curr }), {})
-          : {};
+        const openingMap = data.openingBalances || {};
+        const transMap = data.transactions || {};
         
         const mappedItems: ItemWithPurchase[] = filteredItems.map(item => ({
           ...item,
@@ -314,9 +302,7 @@ function StockPurchaseContent() {
       }
     };
     
-    if (allItems.length > 0) {
-      fetchPurchaseData();
-    }
+    fetchPurchaseData();
   }, [selectedLocation, selectedDate, allItems]);
 
   const handleLocationSelect = async (location: Location) => {

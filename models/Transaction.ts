@@ -35,8 +35,11 @@ const TransactionSchema: Schema = new Schema(
   }
 );
 
-// Compound index for efficient queries
+// Compound indexes for efficient queries
 TransactionSchema.index({ date: 1, item: 1, location: 1 });
+TransactionSchema.index({ date: -1, location: 1 }); // For opening balance queries
+TransactionSchema.index({ location: 1, date: -1 }); // For location-based queries
+TransactionSchema.index({ item: 1, date: -1 }); // For item history queries
 
 const Transaction: Model<ITransaction> =
   mongoose.models.Transaction || mongoose.model<ITransaction>("Transaction", TransactionSchema);

@@ -178,25 +178,17 @@ function DailyOccupancyContent() {
            const targetLocationId = kitchen._id;
            setKitchenId(targetLocationId);
 
-           // 3. Fetch Opening Balances & Current Transactions for this Location & Date
+           // 3. Fetch Opening Balances & Current Transactions using combined API
             const params = new URLSearchParams({
                 date: selectedDate,
                 location: targetLocationId,
             });
             
-            const [openingRes, transRes] = await Promise.all([
-                fetch(`/api/stock/opening-balance?${params}`),
-                fetch(`/api/transactions?${params}`)
-            ]);
+            const response = await fetch(`/api/stock/combined?${params}`);
+            const data = await response.json();
 
-            const openingBalances = await openingRes.json();
-            const transactions: any[] = await transRes.json();
-
-            // Map data
-            const openingMap = Array.isArray(openingBalances) ? 
-                openingBalances.reduce((acc: any, curr: any) => ({...acc, [curr.item]: curr.openingBalance || 0}), {}) : {};
-            
-            const transMap = transactions.reduce((acc: any, curr: any) => ({...acc, [curr.item]: curr}), {});
+            const openingBalances = data.openingBalances || {};
+            const transactions = data.transactions || {};
 
             // Filter items to only those assigned to the current location
             const targetLocation = kitchen;
@@ -204,10 +196,10 @@ function DailyOccupancyContent() {
             const locationDailyItems = dailyItems.filter(item => validItemIds.includes(item._id));
 
             const mappedItems = locationDailyItems.map(item => {
-                const t = transMap[item._id];
+                const t = transactions[item._id];
                 return {
                     ...item,
-                    openingBalanceUnit: openingMap[item._id] || 0,
+                    openingBalanceUnit: openingBalances[item._id]?.unit || 0,
                     consumedUnit: t?.consumedUnit || 0,
                     purchasedUnit: t?.purchasedUnit || 0
                 };

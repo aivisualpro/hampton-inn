@@ -206,15 +206,16 @@ function StockCountContent() {
       if (response.ok) {
         const data = await response.json();
         setAllItems(data);
+        return data;
       }
     } catch (error) {
       console.error("Error fetching items:", error);
     }
+    return [];
   };
 
-  // Fetch transactions and opening balances for the selected date and location
-  // Fetch transactions and opening balances for the selected date and location
-  const findTransactions = useCallback(async () => {
+  // Fetch combined stock data (opening balances + transactions) in a single call
+  const fetchStockData = useCallback(async () => {
     if (!selectedLocation || !selectedDate) {
       setTransactions([]);
       setOpeningBalancesMap({});
@@ -227,20 +228,26 @@ function StockCountContent() {
         location: selectedLocation._id,
       });
 
-      const [openingRes, currentRes] = await Promise.all([
-        fetch(`/api/stock/opening-balance?${params}`),
-        fetch(`/api/transactions?${params}`)
-      ]);
+      const response = await fetch(`/api/stock/combined?${params}`);
+      const data = await response.json();
 
-      const openingData = await openingRes.json();
-      const currentData = await currentRes.json();
-
-      setTransactions(currentData);
-      setOpeningBalancesMap(
-        Array.isArray(openingData) ?
-          openingData.reduce((acc: any, curr: any) => ({ ...acc, [curr.item]: curr }), {})
-          : {}
-      );
+      if (data.transactions) {
+        // Convert map back to array for compatibility
+        setTransactions(Object.values(data.transactions));
+      }
+      
+      if (data.openingBalances) {
+        // Convert to expected format
+        const openingMap: any = {};
+        for (const [itemId, values] of Object.entries(data.openingBalances as Record<string, any>)) {
+          openingMap[itemId] = {
+            item: itemId,
+            openingBalance: values.unit || 0,
+            openingBalancePackage: values.package || 0,
+          };
+        }
+        setOpeningBalancesMap(openingMap);
+      }
     } catch (e) {
       console.error(e);
     }
@@ -314,13 +321,13 @@ function StockCountContent() {
   useEffect(() => {
     if (selectedLocation && selectedDate) {
       setLoading(true);
-      findTransactions()
+      fetchStockData()
         .finally(() => setLoading(false));
 
       setIsEditMode(false);
       setEditedValues({});
     }
-  }, [findTransactions, selectedDate, selectedLocation]);
+  }, [fetchStockData, selectedDate, selectedLocation]);
 
   const [openingBalancesMap, setOpeningBalancesMap] = useState<any>({});
 
@@ -455,7 +462,7 @@ function StockCountContent() {
       await Promise.all(savePromises);
 
       // Refresh transactions silently to get real IDs and ensure consistency
-      await findTransactions();
+      await fetchStockData();
       
       toast({ title: "Success", description: "All changes saved successfully." });
 

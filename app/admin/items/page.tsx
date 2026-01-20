@@ -137,12 +137,14 @@ function CreatableCombobox({
   value, 
   onChange, 
   options, 
-  placeholder = "Select..." 
+  placeholder = "Select...",
+  className
 }: { 
   value: string, 
   onChange: (val: string) => void, 
   options: string[],
-  placeholder?: string
+  placeholder?: string,
+  className?: string
 }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState("")
@@ -160,7 +162,7 @@ function CreatableCombobox({
           variant="outline"
           role="combobox"
           aria-expanded={open}
-          className="w-full justify-between font-normal"
+          className={cn("w-full justify-between font-normal", className)}
         >
           {value || placeholder}
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
@@ -522,6 +524,9 @@ function ItemsContent() {
     }
   };
 
+  const uniqueCategories = Array.from(new Set(items.map(i => i.category).filter(Boolean))).sort();
+  const uniqueSubCategories = Array.from(new Set(items.map(i => i.subCategory).filter(Boolean))).sort();
+
   return (
     <div className="w-full h-full p-0 flex flex-col">
       <Card className="border-none shadow-none bg-transparent rounded-none flex-1 overflow-hidden mb-20 md:mb-0 p-0 gap-0">
@@ -608,6 +613,7 @@ function ItemsContent() {
                           <>
                             <TableHead className="font-semibold text-center text-blue-600 bg-white">Total Unit</TableHead>
                             <TableHead className="font-semibold text-center text-blue-600 bg-white">Total Package</TableHead>
+                            <TableHead className="font-semibold text-center text-green-600 bg-white">Total Count</TableHead>
                           </>
                         )}
                         <TableHead className="font-semibold text-center bg-white">Restock Qty</TableHead>
@@ -660,35 +666,27 @@ function ItemsContent() {
                             </TableCell>
                             <TableCell className="py-1">
                               {isQuickEditMode ? (
-                                <Input 
+                                <CreatableCombobox 
                                   value={editedItems[item._id]?.category ?? item.category} 
-                                  onChange={(e) => handleQuickEditChange(item._id, "category", e.target.value)}
-                                  onClick={(e) => e.stopPropagation()}
+                                  onChange={(val) => handleQuickEditChange(item._id, "category", val)}
+                                  options={uniqueCategories}
+                                  placeholder="Category"
                                   className="h-7 text-xs"
-                                  list={`category-list-${item._id}`}
                                 />
                               ) : (
                                 <Badge variant="secondary" className="font-normal capitalize scale-90 origin-left">
                                   {item.category}
                                 </Badge>
                               )}
-                              {isQuickEditMode && (
-                                <datalist id={`category-list-${item._id}`}>
-                                  <option value="Front Desk" />
-                                  <option value="Housekeeping" />
-                                  <option value="Maintenance" />
-                                  <option value="Breakfast" />
-                                </datalist>
-                              )}
                             </TableCell>
                             <TableCell className="py-1">
                                 {isQuickEditMode ? (
-                                    <Input 
+                                    <CreatableCombobox 
                                         value={editedItems[item._id]?.subCategory ?? item.subCategory ?? ""} 
-                                        onChange={(e) => handleQuickEditChange(item._id, "subCategory", e.target.value)}
-                                        onClick={(e) => e.stopPropagation()}
-                                        className="h-7 text-xs"
+                                        onChange={(val) => handleQuickEditChange(item._id, "subCategory", val)}
+                                        options={uniqueSubCategories}
                                         placeholder="Sub Category"
+                                        className="h-7 text-xs"
                                     />
                                 ) : (
                                     item.subCategory || "-"
@@ -723,14 +721,34 @@ function ItemsContent() {
                               )}
                             </TableCell>
                             {!isQuickEditMode && (
-                              <>
-                                <TableCell className="text-center font-semibold text-blue-600 bg-blue-50/50 py-1">
-                                  {item.totalUnit || 0}
-                                </TableCell>
-                                <TableCell className="text-center font-semibold text-blue-600 bg-blue-50/50 py-1">
-                                  {item.totalPackage || 0}
-                                </TableCell>
-                              </>
+                              (() => {
+                                const pkgSize = item.package ? (parseInt(item.package.match(/(\d+)/)?.[0] || "1")) : 1;
+                                const rawUnit = item.totalUnit || 0;
+                                const rawPkg = item.totalPackage || 0;
+                                const totalCount = rawUnit + (rawPkg * pkgSize);
+                                
+                                let displayPkg = rawPkg;
+                                let displayUnit = rawUnit;
+                                
+                                if (pkgSize > 1) {
+                                    displayPkg = Math.floor(totalCount / pkgSize);
+                                    displayUnit = totalCount % pkgSize;
+                                }
+
+                                return (
+                                  <>
+                                    <TableCell className="text-center font-semibold text-blue-600 bg-blue-50/50 py-1">
+                                      {displayUnit}
+                                    </TableCell>
+                                    <TableCell className="text-center font-semibold text-blue-600 bg-blue-50/50 py-1">
+                                      {displayPkg}
+                                    </TableCell>
+                                    <TableCell className="text-center font-bold text-green-600 bg-green-50/50 py-1">
+                                      {totalCount}
+                                    </TableCell>
+                                  </>
+                                );
+                              })()
                             )}
                             <TableCell className="text-center py-1">
                               {isQuickEditMode ? (

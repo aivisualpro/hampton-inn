@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
         date: { $gte: startOfDay, $lte: endOfDay }
     });
 
-    return NextResponse.json(record || { date: dateStr, count: 0 });
+    return NextResponse.json(record || { date: dateStr, count: 0, percentage: 0 });
 
   } catch (error) {
     console.error("Error fetching occupancy:", error);
@@ -39,24 +39,26 @@ export async function POST(request: NextRequest) {
     try {
         await dbConnect();
         const body = await request.json();
-        const { date, count } = body;
+        const { date, count, percentage } = body;
 
-        if (!date || count === undefined) {
-             return NextResponse.json({ error: "Date and count required" }, { status: 400 });
+        if (!date) {
+             return NextResponse.json({ error: "Date required" }, { status: 400 });
         }
 
         const [year, month, day] = date.split('-').map(Number);
         const dateObj = new Date(Date.UTC(year, month - 1, day));
         
-        // Upsert logic: Check if exists for this day
-        // Since we want to update if exists.
-        
+        // Upsert logic
         const startOfDay = new Date(Date.UTC(year, month - 1, day));
         const endOfDay = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999));
 
+        const updateData: any = { date: dateObj };
+        if (count !== undefined) updateData.count = count;
+        if (percentage !== undefined) updateData.percentage = percentage;
+
         const updated = await Occupancy.findOneAndUpdate(
              { date: { $gte: startOfDay, $lte: endOfDay } },
-             { $set: { date: dateObj, count: count } },
+             { $set: updateData },
              { new: true, upsert: true }
         );
 

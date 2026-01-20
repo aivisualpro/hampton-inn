@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, Suspense } from "react";
+import { useEffect, useState, useCallback, Suspense, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { Loader2, Calendar, Save, ChevronRight, ChevronLeft, Search, Edit2, X } from "lucide-react";
@@ -20,6 +20,13 @@ import { Card, CardContent } from "@/components/ui/card";
 type Item = {
   _id: string;
   item: string;
+  package?: string;
+};
+
+const getPackageSize = (packageStr?: string): number => {
+    if (!packageStr) return 1;
+    const match = packageStr.match(/(\d+)/);
+    return match ? parseInt(match[0], 10) : 1;
 };
 
 type Transaction = {
@@ -33,10 +40,11 @@ type SoakCycleItem = Item & {
   previousBalance: number; // Opening balance from previous date
   soakUnit: number | string;
   disposedUnit: number | string;
+  totalPurchased: number; // New field for purchased quantity
 };
 
 const calculateTotal = (item: SoakCycleItem) => {
-    return (item.previousBalance || 0) + Number(item.soakUnit || 0) - Number(item.disposedUnit || 0);
+    return (item.previousBalance || 0) + (item.totalPurchased || 0) + Number(item.soakUnit || 0) - Number(item.disposedUnit || 0);
 };
 
 const sortItems = (a: SoakCycleItem, b: SoakCycleItem) => {
@@ -152,24 +160,45 @@ function SoakCycleContent() {
     return () => clearTimeout(timer);
   }, [dateInputValue, selectedDate, updateUrl]);  
 
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 20;
+  const [visibleCount, setVisibleCount] = useState(20);
+  const observerTarget = useRef<HTMLDivElement>(null);
 
-  // Filter & Paginate
+  // Filter & Display
   const filteredItems = items.filter((item) => 
     item.item.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
-  const paginatedItems = filteredItems.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+  const displayedItems = filteredItems.slice(0, visibleCount);
 
-  // Reset page on search
+  // Reset visible count on search or date change
   useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery]);
+    setVisibleCount(20);
+  }, [searchQuery, selectedDate]);
+
+  // Infinite Scroll Observer
+  useEffect(() => {
+    if (loading) return;
+    
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisibleCount((prev) => prev + 20);
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    const currentTarget = observerTarget.current;
+    if (currentTarget) {
+      observer.observe(currentTarget);
+    }
+
+    return () => {
+      if (currentTarget) {
+        observer.unobserve(currentTarget);
+      }
+    };
+  }, [loading]);
   
   // Fetch Laundry Location and its Items
   useEffect(() => {
@@ -226,6 +255,7 @@ function SoakCycleContent() {
           countedUnit: 0,
           soakUnit: "",
           disposedUnit: "",
+          totalPurchased: 0,
         }));
         
         setItems(initializedItems);
@@ -266,16 +296,24 @@ function SoakCycleContent() {
               const transactions = data.transactions || {};
               
               setItems(currentItems => currentItems.map(item => {
-                // Find previous balance from map
-                const previousBalance = openingBalances[item._id]?.unit || 0;
+                // Find previous balance from map and convert to total count
+                const prevUnit = openingBalances[item._id]?.unit || 0;
+                const prevPkg = openingBalances[item._id]?.package || 0;
+                const pkgSize = getPackageSize(item.package);
+                const previousBalance = prevUnit + (prevPkg * pkgSize);
 
                 // Find current transaction values from map
                 const trans = transactions[item._id];
                 const soakUnit = trans?.soakUnit || 0;
                 const disposedUnit = trans?.consumedUnit || 0;
                 
+                // Calculate total purchased units for the day
+                const purchasedUnit = trans?.purchasedUnit || 0;
+                const purchasedPkg = trans?.purchasedPackage || 0;
+                const totalPurchased = purchasedUnit + (purchasedPkg * pkgSize);
+
                 // Only update if changed to avoid unnecessary re-renders
-                if (item.previousBalance === previousBalance && item.soakUnit === soakUnit && item.disposedUnit === disposedUnit) {
+                if (item.previousBalance === previousBalance && item.soakUnit === soakUnit && item.disposedUnit === disposedUnit && item.totalPurchased === totalPurchased) {
                     return item;
                 }
 
@@ -284,6 +322,7 @@ function SoakCycleContent() {
                     previousBalance,
                     soakUnit: soakUnit === 0 ? "" : soakUnit,
                     disposedUnit: disposedUnit === 0 ? "" : disposedUnit,
+                    totalPurchased,
                 };
               }).sort(sortItems));
             } catch(e) { 
@@ -333,6 +372,7 @@ function SoakCycleContent() {
             countedUnit: calculateTotal(item), // calculated Total becomes the new Counted Unit record
             soakUnit: item.soakUnit === "" ? 0 : Number(item.soakUnit),
             consumedUnit: item.disposedUnit === "" ? 0 : Number(item.disposedUnit), // Map disposed to consumed
+            source: "Soak Cycle",
           }),
         });
       });
@@ -364,134 +404,138 @@ function SoakCycleContent() {
     <div className="w-full h-full flex flex-col">
       {/* Top Controls */}
       <div className="border-b bg-white px-4 py-3">
-        {/* Breadcrumbs */}
-        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-          <Link href="/" className="hover:text-primary hover:underline">Home</Link>
-          <ChevronRight className="h-4 w-4" />
-          <span className="font-medium text-foreground">Soak Cycle</span>
-        </div>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div className="flex flex-1 items-center justify-between">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mr-4">
+                    <Link href="/" className="hover:text-primary hover:underline">Home</Link>
+                    <ChevronRight className="h-4 w-4" />
+                    <span className="font-medium text-foreground">Soak Cycle</span>
+                </div>
 
-        {/* Mobile: Stacked rows */}
-        <div className="md:hidden space-y-3">
-          {/* Row 1: Search */}
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Search..."
-                className="w-full pl-8 h-10"
-                value={searchQuery}
-                onChange={(e) => updateUrl("q", e.target.value)}
-              />
+
+                {/* Desktop Controls (Inline) */}
+                <div className="hidden md:flex flex-1 items-center gap-3">
+                    {/* Search */}
+                    <div className="relative w-64">
+                        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                        type="search"
+                        placeholder="Search items..."
+                        className="w-full pl-8 h-8"
+                        value={searchQuery}
+                        onChange={(e) => updateUrl("q", e.target.value)}
+                        />
+                    </div>
+
+                    {/* Date Picker */}
+                    <div className="flex items-center gap-1">
+                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => {
+                        const currentDate = new Date(selectedDate);
+                        currentDate.setDate(currentDate.getDate() - 1);
+                        updateUrl("date", currentDate.toISOString().split('T')[0]);
+                        }} disabled={isEditing}>
+                        <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <div className="relative">
+                        <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                        <Input
+                            type="date"
+                            value={dateInputValue}
+                            onChange={(e) => setDateInputValue(e.target.value)}
+                            className="w-[160px] pl-9 h-8 text-sm"
+                            disabled={isEditing}
+                        />
+                        </div>
+                        <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => {
+                        const currentDate = new Date(selectedDate);
+                        currentDate.setDate(currentDate.getDate() + 1);
+                        updateUrl("date", currentDate.toISOString().split('T')[0]);
+                        }} disabled={isEditing}>
+                        <ChevronRight className="h-4 w-4" />
+                        </Button>
+                    </div>
+
+                    <div className="flex-1" />
+
+                    {/* Action Buttons */}
+                    {!isEditing ? (
+                        <Button onClick={() => setIsEditing(true)} size="sm" className="h-8" disabled={loading}>
+                        <Edit2 className="h-3.5 w-3.5 mr-2" />
+                        Update Records
+                        </Button>
+                    ) : (
+                        <div className="flex gap-2">
+                        <Button variant="outline" size="sm" className="h-8" onClick={() => setIsEditing(false)} disabled={saving}>
+                            Cancel
+                        </Button>
+                        <Button size="sm" className="h-8" onClick={handleSave} disabled={saving}>
+                            {saving ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-2" />}
+                            Save
+                        </Button>
+                        </div>
+                    )}
+                </div>
             </div>
-          </div>
 
-          {/* Row 2: Date & Update Button */}
-          <div className="flex gap-2 items-center">
-            <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" onClick={() => {
-              const currentDate = new Date(selectedDate);
-              currentDate.setDate(currentDate.getDate() - 1);
-              updateUrl("date", currentDate.toISOString().split('T')[0]);
-            }} disabled={isEditing}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <div className="relative">
-              <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-              <Input
-                type="date"
-                value={dateInputValue}
-                onChange={(e) => setDateInputValue(e.target.value)}
-                className="w-[130px] pl-8 h-10 text-xs"
-                disabled={isEditing}
-              />
-            </div>
-            <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" onClick={() => {
-              const currentDate = new Date(selectedDate);
-              currentDate.setDate(currentDate.getDate() + 1);
-              updateUrl("date", currentDate.toISOString().split('T')[0]);
-            }} disabled={isEditing}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-            <div className="flex-1" />
-            {!isEditing ? (
-              <Button onClick={() => setIsEditing(true)} size="icon" className="h-10 w-10 shrink-0" disabled={loading}>
-                <Edit2 className="h-4 w-4" />
-              </Button>
-            ) : (
-              <div className="flex gap-2 shrink-0">
-                <Button variant="outline" size="icon" className="h-10 w-10" onClick={() => setIsEditing(false)} disabled={saving}>
-                  <X className="h-4 w-4" />
-                </Button>
-                <Button size="icon" className="h-10 w-10" onClick={handleSave} disabled={saving}>
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                </Button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Desktop: Single row */}
-        <div className="hidden md:flex gap-3 items-center">
-          {/* Search */}
-          <div className="relative w-64">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Search items..."
-              className="w-full pl-8 h-9"
-              value={searchQuery}
-              onChange={(e) => updateUrl("q", e.target.value)}
-            />
-          </div>
-
-          {/* Date Picker */}
-          <div className="flex items-center gap-1">
-            <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => {
-              const currentDate = new Date(selectedDate);
-              currentDate.setDate(currentDate.getDate() - 1);
-              updateUrl("date", currentDate.toISOString().split('T')[0]);
-            }} disabled={isEditing}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <div className="relative">
-              <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-              <Input
-                type="date"
-                value={dateInputValue}
-                onChange={(e) => setDateInputValue(e.target.value)}
-                className="w-[180px] pl-9 h-9"
-                disabled={isEditing}
-              />
-            </div>
-            <Button variant="outline" size="icon" className="h-9 w-9" onClick={() => {
-              const currentDate = new Date(selectedDate);
-              currentDate.setDate(currentDate.getDate() + 1);
-              updateUrl("date", currentDate.toISOString().split('T')[0]);
-            }} disabled={isEditing}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-
-          <div className="flex-1" />
-
-          {/* Action Buttons */}
-          {!isEditing ? (
-            <Button onClick={() => setIsEditing(true)} size="sm" disabled={loading}>
-              <Edit2 className="h-4 w-4 mr-2" />
-              Update Records
-            </Button>
-          ) : (
+            {/* Mobile: Stacked rows (unchanged logic, just wrapped properly) */}
+            <div className="md:hidden space-y-3 w-full">
+            {/* Row 1: Search */}
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => setIsEditing(false)} disabled={saving}>
-                Cancel
-              </Button>
-              <Button size="sm" onClick={handleSave} disabled={saving}>
-                {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                Save
-              </Button>
+                <div className="relative flex-1">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                    type="search"
+                    placeholder="Search..."
+                    className="w-full pl-8 h-10"
+                    value={searchQuery}
+                    onChange={(e) => updateUrl("q", e.target.value)}
+                />
+                </div>
             </div>
-          )}
+
+            {/* Row 2: Date & Update Button */}
+            <div className="flex gap-2 items-center">
+                <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" onClick={() => {
+                const currentDate = new Date(selectedDate);
+                currentDate.setDate(currentDate.getDate() - 1);
+                updateUrl("date", currentDate.toISOString().split('T')[0]);
+                }} disabled={isEditing}>
+                <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <div className="relative">
+                <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                <Input
+                    type="date"
+                    value={dateInputValue}
+                    onChange={(e) => setDateInputValue(e.target.value)}
+                    className="w-[130px] pl-8 h-10 text-xs"
+                    disabled={isEditing}
+                />
+                </div>
+                <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" onClick={() => {
+                const currentDate = new Date(selectedDate);
+                currentDate.setDate(currentDate.getDate() + 1);
+                updateUrl("date", currentDate.toISOString().split('T')[0]);
+                }} disabled={isEditing}>
+                <ChevronRight className="h-4 w-4" />
+                </Button>
+                <div className="flex-1" />
+                {!isEditing ? (
+                <Button onClick={() => setIsEditing(true)} size="icon" className="h-10 w-10 shrink-0" disabled={loading}>
+                    <Edit2 className="h-4 w-4" />
+                </Button>
+                ) : (
+                <div className="flex gap-2 shrink-0">
+                    <Button variant="outline" size="icon" className="h-10 w-10" onClick={() => setIsEditing(false)} disabled={saving}>
+                    <X className="h-4 w-4" />
+                    </Button>
+                    <Button size="icon" className="h-10 w-10" onClick={handleSave} disabled={saving}>
+                    {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    </Button>
+                </div>
+                )}
+            </div>
+            </div>
         </div>
       </div>
 
@@ -511,7 +555,7 @@ function SoakCycleContent() {
               </div>
             ))}
           </div>
-        ) : paginatedItems.length === 0 ? (
+        ) : displayedItems.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
             <p className="text-lg font-medium">No Items</p>
             <p className="text-sm">{searchQuery ? "No items match your search." : "No items found in Laundry."}</p>
@@ -520,7 +564,7 @@ function SoakCycleContent() {
           <>
             {/* Mobile/Tablet Card View */}
             <div className="lg:hidden grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {paginatedItems.map((item) => (
+              {displayedItems.map((item) => (
                 <div key={item._id} className="bg-white rounded-xl shadow-sm border p-4 space-y-3">
                   {/* Item Name */}
                   <div className="flex items-center justify-between">
@@ -594,7 +638,7 @@ function SoakCycleContent() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paginatedItems.map((item) => (
+                  {displayedItems.map((item) => (
                     <TableRow key={item._id}>
                       <TableCell className="font-medium pl-4">
                         <Link href={`/admin/items/${item._id}`} className="hover:underline hover:text-primary">
@@ -644,34 +688,20 @@ function SoakCycleContent() {
         )}
       </div>
       
-      {/* Pagination Controls */}
-      {!loading && filteredItems.length > 0 && (
-        <div className="flex-none flex items-center justify-between p-3 border-t bg-white">
-          <div className="text-xs text-muted-foreground">
-            {(currentPage - 1) * itemsPerPage + 1}-{Math.min(currentPage * itemsPerPage, filteredItems.length)} of {filteredItems.length}
-          </div>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-              disabled={currentPage === 1}
-            >
-              <ChevronLeft className="h-4 w-4" />
-              <span className="hidden sm:inline ml-1">Previous</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-              disabled={currentPage === totalPages}
-            >
-              <span className="hidden sm:inline mr-1">Next</span>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      )}
+      {/* Observer Target for Infinite Scroll */}
+      <div ref={observerTarget} className="p-4 text-center text-sm text-muted-foreground w-full">
+          {displayedItems.length < filteredItems.length ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin mx-auto mb-2" />
+              Loading more items...
+            </>
+          ) : (
+            displayedItems.length > 0 && "No more items"
+          )}
+      </div>
+      <div className="p-4 border-t bg-white text-xs text-muted-foreground text-center">
+        Showing {displayedItems.length} of {filteredItems.length} items
+      </div>
     </div>
   );
 }

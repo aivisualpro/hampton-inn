@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState, useCallback, Suspense, Fragment } from "react";
@@ -15,13 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogFooter,
-} from "@/components/ui/dialog";
+import { useToast } from "@/components/ui/use-toast";
 
 type Item = {
   _id: string;
@@ -34,14 +27,15 @@ type Item = {
 
 type ItemWithStats = Item & {
   openingBalanceUnit: number;
+  openingBalancePackage: number;
+  openingTotal: number; // Total opening = (packages × package size) + units
   consumedUnit: number | string; // Editable
-  purchasedUnit: number | string; // Editable
+  purchasedUnit: number; // Read-only for calculation and validation
 };
 
 type EditedValues = {
   [itemId: string]: {
     consumedUnit: number | string;
-    purchasedUnit: number | string;
   };
 };
 
@@ -71,16 +65,25 @@ const writeToStorage = (key: string, value: string): void => {
 };
 
 function DailyOccupancyContent() {
+  const { toast } = useToast();
+  const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [allItems, setAllItems] = useState<ItemWithStats[]>([]);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editedValues, setEditedValues] = useState<EditedValues>({});
   const [occupancyCount, setOccupancyCount] = useState<number>(0);
+  const [occupancyPercentage, setOccupancyPercentage] = useState<number>(0);
   const [isOccupancyEditing, setIsOccupancyEditing] = useState(false);
   const [tempOccupancyCount, setTempOccupancyCount] = useState<number>(0);
+  const [tempOccupancyPercentage, setTempOccupancyPercentage] = useState<number>(0);
 
   const [kitchenId, setKitchenId] = useState<string | null>(null);
+
+  // Prevent hydration mismatch with Radix UI components
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -90,7 +93,7 @@ function DailyOccupancyContent() {
     const paramDate = searchParams.get("date");
     if (paramDate) return paramDate;
     
-    // Check localStorage first for instant loading
+    // Check localStorage first
     const cachedDate = readFromStorage(STORAGE_KEYS.LAST_DATE);
     if (cachedDate) return cachedDate;
 
@@ -112,7 +115,7 @@ function DailyOccupancyContent() {
 
 
   const updateUrl = (key: string, value: string | null) => {
-      const params = new URLSearchParams(searchParams);
+      const params = new URLSearchParams(searchParams.toString());
       if (value) {
           params.set(key, value);
       } else {
@@ -158,7 +161,6 @@ function DailyOccupancyContent() {
     saveDatePreference(newDateStr);
   };
 
-
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
 
@@ -167,7 +169,13 @@ function DailyOccupancyContent() {
   }, [searchQuery]);
 
   const loadData = useCallback(async () => {
-       if (!selectedDate) return;
+       // Ensure URL always has date
+       const urlDate = searchParams.get("date");
+       if (!urlDate) {
+         updateUrl("date", selectedDate);
+         return; 
+       }
+
        setLoading(true);
        try {
            // 1. Fetch All Items
@@ -178,24 +186,29 @@ function DailyOccupancyContent() {
            const dailyItems = allItemsData.filter(i => i.isDailyCount);
 
            // Fetch User & Locations
-           const [userRes, locRes, occupancyRes] = await Promise.all([
-               fetch("/api/auth/me"),
+           const [locRes, occupancyRes] = await Promise.all([
                fetch("/api/locations"),
                fetch(`/api/occupancy?date=${selectedDate}`)
            ]);
-                      const user = await userRes.json();
-            
-            // Check for saved date preference if no date in URL
-            const urlDate = searchParams.get("date");
-            if (!urlDate && user.lastSelectedDate && user.lastSelectedDate !== selectedDate) {
-                 updateUrl("date", user.lastSelectedDate);
-                 return; // Stop loading for "Today", wait for redirect
-            }
+           // Note: user preference we handle via storage priority mainly, 
+           // and we accept what's in URL as truth.
 
-            const locations = await locRes.json();
+           const locations = await locRes.json();
            const occupancyData = await occupancyRes.json();
            
            setOccupancyCount(occupancyData.count || 0);
+           setOccupancyPercentage(occupancyData.percentage || 0);
+           
+           // Sync API data to URL if missing or different
+           const currentOccupancy = searchParams.get("occupancy");
+           const currentPeople = searchParams.get("people");
+           
+           if (currentOccupancy !== String(occupancyData.percentage || 0) || currentPeople !== String(occupancyData.count || 0)) {
+                updateUrlParams({
+                    occupancy: occupancyData.percentage || 0,
+                    people: occupancyData.count || 0
+                });
+           }
 
            // Determine Location - Always Kitchen
            const kitchen = locations.find((l: any) => l.name.toLowerCase() === "kitchen");
@@ -227,11 +240,30 @@ function DailyOccupancyContent() {
 
             const mappedItems = locationDailyItems.map(item => {
                 const t = transactions[item._id];
+                
+                // For Daily Occupancy, the "opening" is today's Stock Count
+                // (the countedUnit/Package represents available stock for the day)
+                // If there's a Stock Count today, use those values
+                // Otherwise fall back to previous day's closing balance
+                const hasStockCountToday = t?.countedUnit !== undefined || t?.countedPackage !== undefined;
+                
+                const openingUnit = hasStockCountToday 
+                    ? (t.countedUnit || 0) 
+                    : (openingBalances[item._id]?.unit || 0);
+                const openingPackage = hasStockCountToday 
+                    ? (t.countedPackage || 0) 
+                    : (openingBalances[item._id]?.package || 0);
+                    
+                const packageSize = parseInt(item.package || '0') || 0;
+                const openingTotal = (openingPackage * packageSize) + openingUnit;
+                
                 return {
                     ...item,
-                    openingBalanceUnit: openingBalances[item._id]?.unit || 0,
+                    openingBalanceUnit: openingUnit,
+                    openingBalancePackage: openingPackage,
+                    openingTotal: openingTotal,
                     consumedUnit: t?.consumedUnit || "",
-                    purchasedUnit: t?.purchasedUnit || ""
+                    purchasedUnit: (t?.purchasedUnit || 0) + ((t?.purchasedPackage || 0) * packageSize)
                 };
             });
 
@@ -249,16 +281,46 @@ function DailyOccupancyContent() {
   }, [loadData]);
 
 
-  // Occupancy Logic
-  const handleUpdateOccupancy = async () => {
+   // Sync URL update helper
+   const updateUrlParams = (updates: Record<string, string | number | null>) => {
+      const params = new URLSearchParams(searchParams.toString());
+      Object.entries(updates).forEach(([key, value]) => {
+          if (value !== null && value !== undefined && value !== "") {
+              params.set(key, String(value));
+          } else {
+              params.delete(key);
+          }
+      });
+      router.replace(`${pathname}?${params.toString()}`);
+   };
+
+   // Occupancy Logic
+   const handleUpdateOccupancy = async () => {
     try {
         await fetch("/api/occupancy", {
             method: "POST",
             headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({ date: selectedDate, count: tempOccupancyCount })
+            body: JSON.stringify({ 
+              date: selectedDate, 
+              count: tempOccupancyCount,
+              percentage: tempOccupancyPercentage 
+            })
         });
         setOccupancyCount(tempOccupancyCount);
+        setOccupancyPercentage(tempOccupancyPercentage);
+        updateUrlParams({
+            occupancy: tempOccupancyPercentage,
+            people: tempOccupancyCount
+        });
         setIsOccupancyEditing(false);
+        
+        // Sync to URL
+        updateUrlParams({
+            date: selectedDate,
+            count: tempOccupancyCount,
+            percentage: tempOccupancyPercentage
+        });
+
     } catch(e) { console.error(e) }
   };
 
@@ -266,19 +328,42 @@ function DailyOccupancyContent() {
   const handleEditStock = () => {
       const initial: EditedValues = {};
       allItems.forEach(i => {
+          const cookingQty = parseInt(i.cookingQty || '1') || 1;
+          const storedValue = Number(i.consumedUnit || 0);
+          // Convert stored units back to servings for display in edit mode
+          const displayValue = storedValue > 0 ? Math.round(storedValue / cookingQty) : "";
+          
           initial[i._id] = {
-              consumedUnit: i.consumedUnit === 0 ? "" : i.consumedUnit,
-              purchasedUnit: i.purchasedUnit === 0 ? "" : i.purchasedUnit
+              consumedUnit: displayValue,
           };
       });
       setEditedValues(initial);
       setIsEditMode(true);
   };
 
-   const handleValueChange = (itemId: string, field: "consumedUnit" | "purchasedUnit", val: number | string) => {
+   const handleValueChange = (itemId: string, val: number | string) => {
+      // Validation Logic
+      const item = allItems.find(i => i._id === itemId);
+      if (item) {
+          const cookingQty = parseInt(item.cookingQty || '1') || 1;
+          const available = item.openingTotal + (item.purchasedUnit || 0);
+          const numVal = Number(val);
+          const actualConsumed = numVal * cookingQty; // Multiply by cooking qty
+          
+          if (actualConsumed > available) {
+              toast({
+                  variant: "destructive",
+                  title: "Insufficient Stock",
+                  description: `Cannot consume ${numVal} (${actualConsumed} units). Only ${available} available. Add purchases first.`
+              });
+              // Prevent the invalid value from being set in the state.
+              return; 
+          }
+      }
+
       setEditedValues(prev => ({
           ...prev, 
-          [itemId]: { ...prev[itemId], [field]: val }
+          [itemId]: { consumedUnit: val }
       }));
    };
 
@@ -289,19 +374,19 @@ function DailyOccupancyContent() {
 
            const promises = Object.entries(editedValues)
             .map(([itemId, val]) => {
-               // Logic:
-               // Closing = Opening + Purchased - Consumed.
                const item = allItems.find(i => i._id === itemId);
-               const opening = item?.openingBalanceUnit || 0;
+               const cookingQty = parseInt(item?.cookingQty || '1') || 1;
                
-               const valPurchased = val.purchasedUnit === "" ? 0 : Number(val.purchasedUnit);
-               const valConsumed = val.consumedUnit === "" ? 0 : Number(val.consumedUnit);
+               const enteredConsumed = val.consumedUnit === "" ? 0 : Number(val.consumedUnit);
+               const actualConsumed = enteredConsumed * cookingQty; // Multiply by cooking qty
                
-               if (opening === 0 && valPurchased === 0 && valConsumed === 0) {
+               // Skip if nothing to save
+               if (actualConsumed === 0) {
                    return null;
                }
 
-               const closing = opening + valPurchased - valConsumed;
+               // Don't need to calculate closing here - just save the consumption
+               // The closing is calculated dynamically in the UI based on opening - consumed
 
                return fetch("/api/transactions", {
                    method: "POST",
@@ -310,9 +395,9 @@ function DailyOccupancyContent() {
                        date: selectedDate,
                        item: itemId,
                        location: kitchenId,
-                       consumedUnit: valConsumed,
-                       purchasedUnit: valPurchased,
-                       countedUnit: closing
+                       consumedUnit: actualConsumed, // Save only the consumed units
+                       source: "Daily Occupancy"     // Mark as daily occupancy transaction
+                       // Other fields (counted, purchased, soak) will remain empty as defaults are disabled
                    })
                });
             })
@@ -323,9 +408,11 @@ function DailyOccupancyContent() {
            await loadData();
            setIsEditMode(false);
            setEditedValues({});
+           toast({ title: "Success", description: "Occupancy data saved." });
 
        } catch(e) {
            console.error(e);
+           toast({ variant: "destructive", title: "Error", description: "Failed to save." });
        } finally {
            setSaving(false);
        }
@@ -340,36 +427,162 @@ function DailyOccupancyContent() {
             if (subCatA > subCatB) return 1;
             return a.item.localeCompare(b.item);
         });
+   
    // Pagination
    const paginatedItems = filteredItems.slice((currentPage-1)*itemsPerPage, currentPage*itemsPerPage);
    const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
 
 
-   const getDisplayVal = (itemId: string, field: "consumedUnit" | "purchasedUnit") => {
-       if (isEditMode && editedValues[itemId]) return editedValues[itemId][field];
+   const getDisplayVal = (itemId: string) => {
+       if (isEditMode && editedValues[itemId]) return editedValues[itemId].consumedUnit;
        const item = allItems.find(i => i._id === itemId);
-       if (item && item[field] !== 0) {
-            return item[field];
+       if (item && item.consumedUnit !== 0 && item.consumedUnit !== "") {
+            // Convert from stored units back to servings by dividing by cookingQty
+            const cookingQty = parseInt(item.cookingQty || '1') || 1;
+            const rawConsumed = Number(item.consumedUnit) / cookingQty;
+            return Math.round(rawConsumed); // Round to avoid floating point issues
        }
        return "";
+   }
+
+   // Format stock display as "packages/units(total)" e.g., "20/0(200)"
+   const formatStockDisplay = (packages: number, units: number, total: number) => {
+       if (packages === 0 && units === 0) return "0";
+       return `${packages}/${units}(${total})`;
+   }
+
+   // Prevent hydration mismatch - don't render until client-side mounted
+   if (!mounted) {
+     return (
+       <div className="w-full h-full flex items-center justify-center">
+         <Loader2 className="h-8 w-8 animate-spin" />
+       </div>
+     );
    }
 
    return (
     <div className="w-full h-full flex flex-col">
       {/* Top Controls */}
       <div className="border-b bg-white px-4 py-3">
-        {/* Breadcrumbs */}
-        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-          <Link href="/" className="hover:text-primary hover:underline">Home</Link>
-          <ChevronRight className="h-4 w-4" />
-          <span className="font-medium text-foreground">Daily Occupancy</span>
+        {/* Desktop: Single Combined Row */}
+        <div className="hidden md:flex items-center justify-between gap-4">
+            {/* Breadcrumbs */}
+            <div className="flex items-center gap-2 text-sm text-muted-foreground whitespace-nowrap">
+                <Link href="/" className="hover:text-primary hover:underline">Home</Link>
+                <ChevronRight className="h-4 w-4" />
+                <span className="font-medium text-foreground">Daily Occupancy</span>
+            </div>
+            
+            <div className="flex-1" />
+
+            {/* Controls Group */}
+            <div className="flex items-center gap-3">
+                 {/* Search */}
+                <div className="relative w-48 lg:w-64">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                    type="search"
+                    placeholder="Search items..."
+                    className="w-full pl-8 h-9 text-sm"
+                    value={searchQuery}
+                    onChange={(e) => updateUrl("q", e.target.value)}
+                    />
+                </div>
+
+                {/* Occupancy Count */}
+                <div className="flex items-center gap-2 px-3 py-1 bg-purple-50 rounded-lg border border-purple-200 h-9">
+                    <span className="text-sm text-purple-600 font-medium">Occupancy:</span>
+                    {isOccupancyEditing ? (
+                    <div className="flex items-center gap-2">
+                        <div className="relative">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">%</span>
+                            <Input 
+                                type="number" 
+                                value={tempOccupancyPercentage} 
+                                onChange={(e) => setTempOccupancyPercentage(Number(e.target.value) || 0)}
+                                className="w-16 h-7 text-center text-sm pl-4 p-0"
+                                onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                                placeholder="%"
+                            />
+                        </div>
+                        <div className="relative">
+                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">#</span>
+                            <Input 
+                                type="number" 
+                                value={tempOccupancyCount} 
+                                onChange={(e) => setTempOccupancyCount(parseInt(e.target.value) || 0)}
+                                className="w-16 h-7 text-center text-sm pl-4 p-0"
+                                onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                                placeholder="#"
+                            />
+                        </div>
+                        <Button size="sm" onClick={handleUpdateOccupancy} className="h-7 px-2">
+                        <Save className="h-3 w-3" />
+                        </Button>
+                    </div>
+                    ) : (
+                    <div className="flex items-center gap-3 cursor-pointer hover:bg-purple-100/50 rounded px-2 py-0.5 transition-colors" onClick={() => { 
+                        setTempOccupancyCount(occupancyCount); 
+                        setTempOccupancyPercentage(occupancyPercentage);
+                        setIsOccupancyEditing(true); 
+                    }}>
+                        <div className="flex items-center gap-1">
+                        <span className="text-base font-bold text-purple-600">{occupancyPercentage}%</span>
+                        </div>
+                        <div className="h-4 w-px bg-purple-300"></div>
+                        <div className="flex items-center gap-1">
+                        <span className="text-base font-bold text-purple-600">{occupancyCount}</span>
+                        <span className="text-xs text-purple-500">ppl</span>
+                        </div>
+                    </div>
+                    )}
+                </div>
+
+                {/* Date Picker */}
+                <div className="flex items-center gap-1">
+                    <Button variant="outline" size="icon" className="h-9 w-9" onClick={handlePrevDay} disabled={isEditMode}>
+                    <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <div className="relative">
+                    <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                    <Input
+                        type="date"
+                        value={dateInputValue}
+                        onChange={handleDateInput}
+                        className="w-[140px] pl-9 h-9 text-sm"
+                        disabled={isEditMode}
+                    />
+                    </div>
+                    <Button variant="outline" size="icon" className="h-9 w-9" onClick={handleNextDay} disabled={isEditMode}>
+                    <ChevronRight className="h-4 w-4" />
+                    </Button>
+                </div>
+
+                {/* Action Buttons */}
+                {!isEditMode ? (
+                    <Button onClick={handleEditStock} size="sm" className="h-9">
+                    <Pencil className="h-4 w-4 mr-2" />
+                    Update Record
+                    </Button>
+                ) : (
+                    <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={() => { setIsEditMode(false); setEditedValues({}); }} className="h-9">
+                        Cancel
+                    </Button>
+                    <Button size="sm" onClick={handleSaveStock} disabled={saving} className="h-9">
+                        {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                        Save
+                    </Button>
+                    </div>
+                )}
+            </div>
         </div>
 
-        {/* Mobile: Stacked rows */}
+        {/* Mobile: Stacked rows (Unchanged Logic, just ensuring it renders when hidden md is true) */}
         <div className="md:hidden space-y-3">
           {/* Row 1: Search + Occupancy */}
-          <div className="flex gap-2">
-            <div className="relative flex-1">
+          <div className="flex flex-col gap-2">
+            <div className="relative w-full">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 type="search"
@@ -379,25 +592,52 @@ function DailyOccupancyContent() {
                 onChange={(e) => updateUrl("q", e.target.value)}
               />
             </div>
-            {/* Occupancy Count */}
-            <div className="flex items-center gap-2 px-3 bg-purple-50 rounded-lg border border-purple-200">
+            
+            {/* Occupancy Count Mobile */}
+            <div className="flex items-center justify-between gap-2 px-3 py-2 bg-purple-50 rounded-lg border border-purple-200">
+               <span className="text-sm font-medium text-purple-700">Occupancy:</span>
               {isOccupancyEditing ? (
-                <div className="flex items-center gap-1">
-                  <Input 
-                    type="number" 
-                    value={tempOccupancyCount} 
-                    onChange={(e) => setTempOccupancyCount(parseInt(e.target.value) || 0)}
-                    className="w-16 h-8 text-center text-sm"
-                    onWheel={(e) => (e.target as HTMLInputElement).blur()}
-                  />
+                <div className="flex items-center gap-2">
+                   <div className="flex items-center gap-1">
+                      <span className="text-xs text-purple-600">%</span>
+                      <Input 
+                        type="number" 
+                        value={tempOccupancyPercentage} 
+                        onChange={(e) => setTempOccupancyPercentage(Number(e.target.value) || 0)}
+                        className="w-14 h-8 text-center text-sm"
+                        onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                        placeholder="%"
+                      />
+                   </div>
+                   <div className="flex items-center gap-1">
+                      <span className="text-xs text-purple-600">#</span>
+                      <Input 
+                        type="number" 
+                        value={tempOccupancyCount} 
+                        onChange={(e) => setTempOccupancyCount(parseInt(e.target.value) || 0)}
+                        className="w-14 h-8 text-center text-sm"
+                        onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                        placeholder="#"
+                      />
+                   </div>
                   <Button size="sm" onClick={handleUpdateOccupancy} className="h-8 px-2">
                     <Save className="h-3 w-3" />
                   </Button>
                 </div>
               ) : (
-                <div className="flex items-center gap-1 cursor-pointer" onClick={() => { setTempOccupancyCount(occupancyCount); setIsOccupancyEditing(true); }}>
-                  <span className="text-lg font-bold text-purple-600">{occupancyCount}</span>
-                  <span className="text-xs text-purple-500">ppl</span>
+                <div className="flex items-center gap-3 cursor-pointer" onClick={() => { 
+                    setTempOccupancyCount(occupancyCount); 
+                    setTempOccupancyPercentage(occupancyPercentage);
+                    setIsOccupancyEditing(true); 
+                }}>
+                  <div className="flex flex-col items-center">
+                    <span className="text-sm font-bold text-purple-600">{occupancyPercentage}%</span>
+                  </div>
+                  <div className="h-4 w-px bg-purple-200"></div>
+                  <div className="flex flex-col items-center">
+                    <span className="text-sm font-bold text-purple-600">{occupancyCount}</span>
+                    <span className="text-xs text-purple-500">ppl</span>
+                  </div>
                 </div>
               )}
             </div>
@@ -438,103 +678,22 @@ function DailyOccupancyContent() {
             )}
           </div>
         </div>
-
-        {/* Desktop: Single row */}
-        <div className="hidden md:flex gap-3 items-center">
-          {/* Search */}
-          <div className="relative w-64">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Search items..."
-              className="w-full pl-8 h-9"
-              value={searchQuery}
-              onChange={(e) => updateUrl("q", e.target.value)}
-            />
-          </div>
-
-          {/* Occupancy Count */}
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-purple-50 rounded-lg border border-purple-200">
-            <span className="text-sm text-purple-600 font-medium">Occupancy:</span>
-            {isOccupancyEditing ? (
-              <div className="flex items-center gap-1">
-                <Input 
-                  type="number" 
-                  value={tempOccupancyCount} 
-                  onChange={(e) => setTempOccupancyCount(parseInt(e.target.value) || 0)}
-                  className="w-16 h-7 text-center text-sm"
-                  onWheel={(e) => (e.target as HTMLInputElement).blur()}
-                />
-                <Button size="sm" onClick={handleUpdateOccupancy} className="h-7 px-2">
-                  <Save className="h-3 w-3" />
-                </Button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-1 cursor-pointer" onClick={() => { setTempOccupancyCount(occupancyCount); setIsOccupancyEditing(true); }}>
-                <span className="text-lg font-bold text-purple-600">{occupancyCount}</span>
-                <span className="text-xs text-purple-500">people</span>
-              </div>
-            )}
-          </div>
-
-          {/* Date Picker */}
-          <div className="flex items-center gap-1">
-            <Button variant="outline" size="icon" className="h-9 w-9" onClick={handlePrevDay} disabled={isEditMode}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <div className="relative">
-              <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-              <Input
-                type="date"
-                value={dateInputValue}
-                onChange={handleDateInput}
-                className="w-[180px] pl-9 h-9"
-                disabled={isEditMode}
-              />
-            </div>
-            <Button variant="outline" size="icon" className="h-9 w-9" onClick={handleNextDay} disabled={isEditMode}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-
-          <div className="flex-1" />
-
-          {/* Action Buttons */}
-          {!isEditMode ? (
-            <Button onClick={handleEditStock} size="sm">
-              <Pencil className="h-4 w-4 mr-2" />
-              Update Record
-            </Button>
-          ) : (
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => { setIsEditMode(false); setEditedValues({}); }}>
-                Cancel
-              </Button>
-              <Button size="sm" onClick={handleSaveStock} disabled={saving}>
-                {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                Save
-              </Button>
-            </div>
-          )}
-        </div>
       </div>
 
       {/* Items List - Card View for Mobile, Table for Desktop */}
       <div className="flex-1 overflow-auto bg-gray-50 p-4">
         {loading ? (
-          <div className="space-y-3">
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} className="bg-white rounded-xl shadow-sm border p-4 animate-pulse">
-                <div className="h-6 bg-gray-200 rounded w-1/3 mb-3"></div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="h-16 bg-gray-100 rounded-lg"></div>
-                  <div className="h-16 bg-blue-50 rounded-lg"></div>
-                  <div className="h-16 bg-blue-50 rounded-lg"></div>
-                  <div className="h-16 bg-green-50 rounded-lg"></div>
-                </div>
-              </div>
-            ))}
-          </div>
+             <div className="space-y-3">
+               {[1, 2, 3, 4, 5].map((i) => (
+                 <div key={i} className="bg-white rounded-xl shadow-sm border p-4 animate-pulse">
+                   <div className="h-6 bg-gray-200 rounded w-1/3 mb-3"></div>
+                   <div className="grid grid-cols-2 gap-3">
+                     <div className="h-16 bg-gray-100 rounded-lg"></div>
+                     <div className="h-16 bg-blue-50 rounded-lg"></div>
+                   </div>
+                 </div>
+               ))}
+             </div>
         ) : paginatedItems.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
             <Utensils className="h-12 w-12 mb-4 opacity-50" />
@@ -546,10 +705,25 @@ function DailyOccupancyContent() {
             {/* Mobile/Tablet Card View */}
             <div className="lg:hidden grid grid-cols-1 sm:grid-cols-2 gap-3">
               {paginatedItems.map((item) => {
-                const opening = item.openingBalanceUnit;
-                const purchase = getDisplayVal(item._id, "purchasedUnit");
-                const consumed = getDisplayVal(item._id, "consumedUnit");
-                const closing = opening + Number(purchase || 0) - Number(consumed || 0);
+                const openingPackages = item.openingBalancePackage;
+                const openingUnits = item.openingBalanceUnit;
+                const opening = item.openingTotal;
+                const packageSize = parseInt(item.package || '0') || 0;
+                const cookingQty = parseInt(item.cookingQty || '1') || 1;
+                const purchased = item.purchasedUnit || 0;
+                const consumed = getDisplayVal(item._id);
+                
+                // If editing, utilize the value from the input (servings). 
+                // If not editing, 'consumed' is the value from getDisplayVal, which IS NOW ALSO SERVINGS (divided by cookingQty).
+                // So in ALL cases, we multiply by cookingQty to get the total units to subtract.
+                const isEditing = isEditMode && editedValues[item._id] !== undefined;
+                const displayConsumed = Number(consumed || 0);
+                const actualConsumed = displayConsumed * cookingQty;
+                
+                const closingTotal = opening + purchased - actualConsumed;
+                // Calculate closing packages and units (assume units consumed first, then packages)
+                const closingPackages = packageSize > 0 ? Math.floor(closingTotal / packageSize) : 0;
+                const closingUnits = packageSize > 0 ? closingTotal % packageSize : closingTotal;
                 
                 return (
                   <div key={item._id} className="bg-white rounded-xl shadow-sm border p-4 space-y-3">
@@ -567,28 +741,11 @@ function DailyOccupancyContent() {
                     </div>
                     
                     {/* Values Grid */}
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-3 gap-3">
                       {/* Opening Balance */}
                       <div className="bg-gray-50 rounded-lg p-3">
                         <p className="text-xs text-gray-500 mb-1">Opening</p>
-                        <p className="text-lg font-bold text-gray-700">{opening}</p>
-                      </div>
-                      
-                      {/* Purchase - Editable */}
-                      <div className="bg-blue-50 rounded-lg p-3">
-                        <p className="text-xs text-blue-600 mb-1">Purchase</p>
-                        {isEditMode ? (
-                          <Input
-                            type="number"
-                            min="0"
-                            value={purchase}
-                            onChange={(e) => handleValueChange(item._id, "purchasedUnit", e.target.value)}
-                            className="h-10 text-lg font-bold text-center border-blue-200 focus-visible:ring-blue-400"
-                            onWheel={(e) => (e.target as HTMLInputElement).blur()}
-                          />
-                        ) : (
-                          <p className="text-lg font-bold text-blue-700">{purchase === 0 ? "" : purchase}</p>
-                        )}
+                        <p className="text-lg font-bold text-gray-700">{formatStockDisplay(openingPackages, openingUnits, opening)}</p>
                       </div>
                       
                       {/* Consumed - Editable */}
@@ -599,7 +756,7 @@ function DailyOccupancyContent() {
                             type="number"
                             min="0"
                             value={consumed}
-                            onChange={(e) => handleValueChange(item._id, "consumedUnit", e.target.value)}
+                            onChange={(e) => handleValueChange(item._id, e.target.value)}
                             className="h-10 text-lg font-bold text-center border-orange-200 focus-visible:ring-orange-400"
                             onWheel={(e) => (e.target as HTMLInputElement).blur()}
                           />
@@ -611,7 +768,7 @@ function DailyOccupancyContent() {
                       {/* Closing Balance */}
                       <div className="bg-green-50 rounded-lg p-3">
                         <p className="text-xs text-green-600 mb-1">Closing</p>
-                        <p className="text-lg font-bold text-green-700">{closing}</p>
+                        <p className="text-lg font-bold text-green-700">{formatStockDisplay(closingPackages, closingUnits, closingTotal)}</p>
                       </div>
                     </div>
                   </div>
@@ -627,17 +784,30 @@ function DailyOccupancyContent() {
                     <TableHead className="font-semibold pl-4">Item</TableHead>
                     <TableHead className="font-semibold text-center w-[100px]">Cooking Qty</TableHead>
                     <TableHead className="font-semibold text-center w-[100px] bg-gray-50/50">Opening</TableHead>
-                    <TableHead className="font-semibold text-center w-[100px] bg-blue-50/50">Purchase</TableHead>
                     <TableHead className="font-semibold text-center w-[100px] bg-orange-50/50">Consumed</TableHead>
                     <TableHead className="font-semibold text-center w-[100px] bg-green-50/50">Closing</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {paginatedItems.map((item, index) => {
-                    const opening = item.openingBalanceUnit;
-                    const purchase = getDisplayVal(item._id, "purchasedUnit");
-                    const consumed = getDisplayVal(item._id, "consumedUnit");
-                    const closing = opening + Number(purchase || 0) - Number(consumed || 0);
+                    const openingPackages = item.openingBalancePackage;
+                    const openingUnits = item.openingBalanceUnit;
+                    const opening = item.openingTotal;
+                    const packageSize = parseInt(item.package || '0') || 0;
+                    const cookingQty = parseInt(item.cookingQty || '1') || 1;
+                    const purchased = item.purchasedUnit || 0;
+                    const consumed = getDisplayVal(item._id);
+                    
+                    // If editing, utilize the value from the input (servings). 
+                    // If not editing, 'consumed' is the value from getDisplayVal, which IS NOW ALSO SERVINGS (divided by cookingQty).
+                    // So in ALL cases, we multiply by cookingQty to get the total units to subtract.
+                    const isEditing = isEditMode && editedValues[item._id] !== undefined;
+                    const displayConsumed = Number(consumed || 0);
+                    const actualConsumed = displayConsumed * cookingQty;
+                    
+                    const closingTotal = opening + purchased - actualConsumed;
+                    const closingPackages = packageSize > 0 ? Math.floor(closingTotal / packageSize) : 0;
+                    const closingUnits = packageSize > 0 ? closingTotal % packageSize : closingTotal;
                     
                     const prevItem = index > 0 ? paginatedItems[index - 1] : null;
                     const showHeader = !prevItem || item.subCategory !== prevItem.subCategory;
@@ -647,7 +817,7 @@ function DailyOccupancyContent() {
                       <Fragment key={item._id}>
                         {showHeader && (
                           <TableRow className="bg-muted/50 hover:bg-muted/50">
-                            <TableCell colSpan={6} className="font-semibold text-primary py-2">
+                            <TableCell colSpan={5} className="font-semibold text-primary py-2">
                               {subCategoryLabel}
                             </TableCell>
                           </TableRow>
@@ -663,21 +833,7 @@ function DailyOccupancyContent() {
                           </TableCell>
                           <TableCell className="text-center">{item.cookingQty || "-"}</TableCell>
                           <TableCell className="text-center font-medium text-gray-600 bg-gray-50/30">
-                            {opening}
-                          </TableCell>
-                          <TableCell className="text-center bg-blue-50/20">
-                            {isEditMode ? (
-                              <Input
-                                type="number"
-                                min="0"
-                                value={purchase}
-                                onChange={(e) => handleValueChange(item._id, "purchasedUnit", e.target.value)}
-                                className="w-16 mx-auto text-center h-8 border-blue-200 focus-visible:ring-blue-400"
-                                onWheel={(e) => (e.target as HTMLInputElement).blur()}
-                              />
-                            ) : (
-                              <span>{purchase === 0 ? "" : purchase}</span>
-                            )}
+                            {formatStockDisplay(openingPackages, openingUnits, opening)}
                           </TableCell>
                           <TableCell className="text-center bg-orange-50/20">
                             {isEditMode ? (
@@ -685,7 +841,7 @@ function DailyOccupancyContent() {
                                 type="number"
                                 min="0"
                                 value={consumed}
-                                onChange={(e) => handleValueChange(item._id, "consumedUnit", e.target.value)}
+                                onChange={(e) => handleValueChange(item._id, e.target.value)}
                                 className="w-16 mx-auto text-center h-8 border-orange-200 focus-visible:ring-orange-400"
                                 onWheel={(e) => (e.target as HTMLInputElement).blur()}
                               />
@@ -694,7 +850,7 @@ function DailyOccupancyContent() {
                             )}
                           </TableCell>
                           <TableCell className="text-center font-bold text-green-700 bg-green-50/20">
-                            {closing}
+                            {formatStockDisplay(closingPackages, closingUnits, closingTotal)}
                           </TableCell>
                         </TableRow>
                       </Fragment>
@@ -706,6 +862,7 @@ function DailyOccupancyContent() {
           </>
         )}
       </div>
+
       
       {/* Pagination Controls */}
       {!loading && paginatedItems.length > 0 && (
@@ -746,4 +903,3 @@ export default function DailyOccupancyPage() {
         </Suspense>
     );
 }
-

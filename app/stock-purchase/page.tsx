@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, Suspense } from "react";
+import { useEffect, useState, useCallback, Suspense, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { Loader2, MapPin, ChevronDown, Calendar, Pencil, Save, ChevronRight, Search, ChevronLeft } from "lucide-react";
@@ -57,7 +57,13 @@ type User = {
   email: string;
   locations: string[];
   lastSelectedLocation?: string;
-  lastSelectedDate?: string;
+  firstLoaded?: boolean;
+};
+
+const getPackageSize = (packageStr?: string): number => {
+    if (!packageStr) return 1;
+    const match = packageStr.match(/(\d+)/);
+    return match ? parseInt(match[0], 10) : 1;
 };
 
 // LocalStorage keys for instant loading
@@ -99,6 +105,18 @@ function StockPurchaseContent() {
   const [editedValues, setEditedValues] = useState<EditedValues>({});
   const { toast } = useToast();
 
+  // Scroll / Pagination state
+  const [visibleCount, setVisibleCount] = useState(20);
+  const observerTarget = useRef(null);
+  
+  // Reset visible count on search or location change
+  useEffect(() => {
+    setVisibleCount(20);
+  }, [selectedLocation]); // We'll add searchQuery dependency later or now if available. 
+  // Wait, searchQuery is defined at line 126. So I should place this effect further down.
+
+
+
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -135,6 +153,8 @@ function StockPurchaseContent() {
       body: JSON.stringify({ lastSelectedDate: dateStr })
     }).catch(e => console.error("Failed to save date preference", e));
   };
+
+
 
   const updateUrl = useCallback((key: string, value: string | null) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -177,12 +197,7 @@ function StockPurchaseContent() {
     updateUrl("date", newDateStr);
   };
 
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 20;
 
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery, selectedLocation]);
 
   // Fetch current user
   const fetchCurrentUser = async () => {
@@ -254,8 +269,12 @@ function StockPurchaseContent() {
       }
       setUserLocations(filteredLocations);
 
-      // STEP 3: Set initial location (priority: URL > localStorage > server)
-      const urlLocationId = searchParams.get("location");
+      // STEP 3: Setup initial state and sync URL
+      const params = new URLSearchParams(window.location.search);
+      let needsUpdate = false;
+
+      // --- Location Handling ---
+      const urlLocationId = params.get("location");
       let initialLocation: Location | undefined;
 
       // Try URL first
@@ -263,7 +282,7 @@ function StockPurchaseContent() {
         initialLocation = filteredLocations.find((l: Location) => l._id === urlLocationId);
       } 
       
-      // Try localStorage cache (instant)
+      // Try localStorage cache
       if (!initialLocation && cachedLocationId) {
         initialLocation = filteredLocations.find((l: Location) => l._id === cachedLocationId);
       }
@@ -271,7 +290,6 @@ function StockPurchaseContent() {
       // Try server preference
       if (!initialLocation && user?.lastSelectedLocation) {
         initialLocation = filteredLocations.find((l: Location) => l._id === user.lastSelectedLocation);
-        // Sync localStorage with server preference
         if (initialLocation) {
           writeToStorage(STORAGE_KEYS.LAST_LOCATION, initialLocation._id);
         }
@@ -279,19 +297,35 @@ function StockPurchaseContent() {
 
       if (initialLocation) {
         setSelectedLocation(initialLocation);
-        // Sync URL if it was empty but we found a default
         if (!urlLocationId) {
-          const params = new URLSearchParams(window.location.search);
           params.set("location", initialLocation._id);
-          router.replace(`${pathname}?${params.toString()}`);
+          needsUpdate = true;
         }
       }
-      
-      // Handle server date preference (only if not already set)
-      const urlDate = searchParams.get("date");
-      const cachedDate = readFromStorage(STORAGE_KEYS.LAST_DATE);
-      if (!urlDate && !cachedDate && user?.lastSelectedDate) {
-        updateUrl("date", user.lastSelectedDate);
+
+      // --- Date Handling ---
+      const urlDate = params.get("date");
+      if (!urlDate) {
+        let dateToSet = readFromStorage(STORAGE_KEYS.LAST_DATE);
+        
+        if (!dateToSet && user?.lastSelectedDate) {
+          dateToSet = user.lastSelectedDate;
+        }
+        
+        if (!dateToSet) {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            dateToSet = `${year}-${month}-${day}`;
+        }
+        
+        params.set("date", dateToSet);
+        needsUpdate = true;
+      }
+
+      if (needsUpdate) {
+        router.replace(`${pathname}?${params.toString()}`);
       }
       
       setLoading(false);
@@ -300,6 +334,36 @@ function StockPurchaseContent() {
   }, []);
 
   // Items for current location with purchase data
+  // Reset visible count on search or location change
+  useEffect(() => {
+    setVisibleCount(20);
+  }, [searchQuery, selectedLocation]);
+
+  // Infinite Scroll Observer
+  useEffect(() => {
+    if (loading) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisibleCount((prev) => prev + 20);
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    const currentTarget = observerTarget.current;
+    if (currentTarget) {
+      observer.observe(currentTarget);
+    }
+
+    return () => {
+      if (currentTarget) {
+        observer.unobserve(currentTarget);
+      }
+    };
+  }, [loading]);
+
   const [locationItems, setLocationItems] = useState<ItemWithPurchase[]>([]);
 
   // Fetch purchase data when location or date changes - uses combined API for speed
@@ -328,13 +392,35 @@ function StockPurchaseContent() {
         const openingMap = data.openingBalances || {};
         const transMap = data.transactions || {};
         
-        const mappedItems: ItemWithPurchase[] = filteredItems.map(item => ({
-          ...item,
-          openingBalanceUnit: openingMap[item._id]?.unit || 0,
-          openingBalancePackage: openingMap[item._id]?.package || 0,
-          purchasedUnit: transMap[item._id]?.purchasedUnit || 0,
-          purchasedPackage: transMap[item._id]?.purchasedPackage || 0,
-        }));
+          const mappedItems: ItemWithPurchase[] = filteredItems.map(item => {
+            const rawOpeningUnit = openingMap[item._id]?.unit || 0;
+            const rawOpeningPkg = openingMap[item._id]?.package || 0; // Usually 0 if countedUnit was total
+
+            // If we have a package size, and the API returned a total count in 'unit', let's try to interpret it
+            // BUT, usually openingBalances returns exactly what was in the DB.
+            // If the DB stores Total in countedUnit, we want to split it for display.
+            
+            const pkgSize = getPackageSize(item.package);
+            let openingUnit = rawOpeningUnit;
+            let openingPackage = rawOpeningPkg;
+
+            if (pkgSize > 1) {
+                // Assuming rawOpeningUnit is the TOTAL count (since we save total in countedUnit)
+                // And rawOpeningPkg is likely 0 or irrelevant if we only use countedUnit for totals.
+                // We recalculate standard breakdown:
+                const total = rawOpeningUnit + (rawOpeningPkg * pkgSize);
+                openingPackage = Math.floor(total / pkgSize);
+                openingUnit = total % pkgSize;
+            }
+
+            return {
+              ...item,
+              openingBalanceUnit: openingUnit,
+              openingBalancePackage: openingPackage,
+              purchasedUnit: transMap[item._id]?.purchasedUnit || 0,
+              purchasedPackage: transMap[item._id]?.purchasedPackage || 0,
+            };
+          });
         
         setLocationItems(mappedItems);
       } catch (error) {
@@ -446,8 +532,7 @@ function StockPurchaseContent() {
             location: selectedLocation._id,
             purchasedUnit: valPurchasedUnit,
             purchasedPackage: valPurchasedPackage,
-            countedUnit: closingUnit,
-            countedPackage: closingPkg,
+            source: "Stock Purchase",
           }),
         });
       });
@@ -488,166 +573,166 @@ function StockPurchaseContent() {
     item.item.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
-  const paginatedItems = filteredItems.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+  const displayedItems = filteredItems.slice(0, visibleCount);
 
   return (
     <div className="w-full h-full flex flex-col">
       {/* Top Controls */}
       <div className="border-b bg-white px-4 py-3">
-        {/* Breadcrumbs */}
-        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
-          <Link href="/" className="hover:text-primary hover:underline">Home</Link>
-          <ChevronRight className="h-4 w-4" />
-          <span className="font-medium text-foreground">Stock Purchase</span>
-        </div>
+        {/* Breadcrumbs & Desktop Controls */}
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+            <div className="flex flex-1 items-center justify-between">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mr-4">
+                  <Link href="/" className="hover:text-primary hover:underline">Home</Link>
+                  <ChevronRight className="h-4 w-4" />
+                  <span className="font-medium text-foreground">Stock Purchase</span>
+                </div>
 
-        {/* Mobile: Stacked rows */}
-        <div className="lg:hidden space-y-3">
-          {/* Row 1: Location & Search */}
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              className="flex-1 justify-between text-left h-10"
-              onClick={() => setIsLocationSelectorOpen(true)}
-              disabled={isEditMode}
-            >
-              <div className="flex items-center gap-2 truncate">
-                <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
-                <span className={selectedLocation ? "font-medium truncate" : "text-muted-foreground truncate"}>
-                  {selectedLocation ? selectedLocation.name : "Select Location"}
-                </span>
-              </div>
-              <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
-            </Button>
-            <div className="relative flex-1">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                type="search"
-                placeholder="Search..."
-                className="w-full pl-8 h-10"
-                value={searchQuery}
-                onChange={(e) => updateUrl("q", e.target.value)}
-              />
-            </div>
-          </div>
-
-          {/* Row 2: Date & Update Button */}
-          <div className="flex gap-2 items-center">
-            <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" onClick={handlePrevDay} disabled={isEditMode}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <div className="relative">
-              <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-              <Input
-                type="date"
-                value={dateInputValue}
-                onChange={handleDateChange}
-                className="w-[130px] pl-8 h-10 text-xs"
-                disabled={isEditMode}
-              />
-            </div>
-            <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" onClick={handleNextDay} disabled={isEditMode}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-            <div className="flex-1" />
-            {selectedLocation && locationItems.length > 0 && (
-              <>
-                {!isEditMode ? (
-                  <Button onClick={handleUpdateStock} size="icon" className="h-10 w-10 shrink-0">
-                    <Pencil className="h-4 w-4" />
+                {/* Desktop Controls (Inline) */}
+                <div className="hidden lg:flex flex-1 items-center gap-3">
+                  {/* Location Selector */}
+                  <Button
+                    variant="outline"
+                    className="w-[180px] justify-between text-left h-8 text-xs"
+                    onClick={() => setIsLocationSelectorOpen(true)}
+                    disabled={isEditMode}
+                  >
+                    <div className="flex items-center gap-2 truncate">
+                      <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <span className={selectedLocation ? "font-medium truncate" : "text-muted-foreground truncate"}>
+                        {selectedLocation ? selectedLocation.name : "Select Location"}
+                      </span>
+                    </div>
+                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                   </Button>
-                ) : (
-                  <div className="flex gap-2 shrink-0">
-                    <Button variant="outline" size="icon" className="h-10 w-10" onClick={handleCancel} disabled={saving}>
-                      <ChevronLeft className="h-4 w-4" />
+
+                  {/* Search */}
+                  <div className="relative w-48 xl:w-64">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                    <Input
+                      type="search"
+                      placeholder="Search items..."
+                      className="w-full pl-8 h-8 text-xs"
+                      value={searchQuery}
+                      onChange={(e) => updateUrl("q", e.target.value)}
+                    />
+                  </div>
+
+                  {/* Date Picker */}
+                  <div className="flex items-center gap-1">
+                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={handlePrevDay} disabled={isEditMode}>
+                      <ChevronLeft className="h-3.5 w-3.5" />
                     </Button>
-                    <Button size="icon" className="h-10 w-10" onClick={handleSave} disabled={saving}>
-                      {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                    <div className="relative">
+                      <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+                      <Input
+                        type="date"
+                        value={dateInputValue}
+                        onChange={handleDateChange}
+                        className="w-[160px] pl-8 h-8 text-xs"
+                        disabled={isEditMode}
+                      />
+                    </div>
+                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={handleNextDay} disabled={isEditMode}>
+                      <ChevronRight className="h-3.5 w-3.5" />
                     </Button>
                   </div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
 
-        {/* Desktop: Single row */}
-        <div className="hidden lg:flex gap-3 items-center">
-          {/* Location Selector */}
-          <Button
-            variant="outline"
-            className="w-[200px] justify-between text-left h-9"
-            onClick={() => setIsLocationSelectorOpen(true)}
-            disabled={isEditMode}
-          >
-            <div className="flex items-center gap-2 truncate">
-              <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
-              <span className={selectedLocation ? "font-medium truncate" : "text-muted-foreground truncate"}>
-                {selectedLocation ? selectedLocation.name : "Select Location"}
-              </span>
-            </div>
-            <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
-          </Button>
+                  <div className="flex-1" />
 
-          {/* Search */}
-          <div className="relative w-64">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Search items..."
-              className="w-full pl-8 h-9"
-              value={searchQuery}
-              onChange={(e) => updateUrl("q", e.target.value)}
-            />
-          </div>
-
-          {/* Date Picker */}
-          <div className="flex items-center gap-1">
-            <Button variant="outline" size="icon" className="h-9 w-9" onClick={handlePrevDay} disabled={isEditMode}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <div className="relative">
-              <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-              <Input
-                type="date"
-                value={dateInputValue}
-                onChange={handleDateChange}
-                className="w-[180px] pl-9 h-9"
-                disabled={isEditMode}
-              />
-            </div>
-            <Button variant="outline" size="icon" className="h-9 w-9" onClick={handleNextDay} disabled={isEditMode}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-
-          <div className="flex-1" />
-
-          {/* Action Buttons */}
-          {selectedLocation && locationItems.length > 0 && (
-            <>
-              {!isEditMode ? (
-                <Button onClick={handleUpdateStock} size="sm">
-                  <Pencil className="h-4 w-4 mr-2" />
-                  Update Purchase
-                </Button>
-              ) : (
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={handleCancel} disabled={saving}>
-                    Cancel
-                  </Button>
-                  <Button size="sm" onClick={handleSave} disabled={saving}>
-                    {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                    Save
-                  </Button>
+                  {/* Action Buttons */}
+                  {selectedLocation && locationItems.length > 0 && (
+                    <>
+                      {!isEditMode ? (
+                        <Button onClick={handleUpdateStock} size="sm" className="h-8">
+                          <Pencil className="h-3.5 w-3.5 mr-2" />
+                          Update Purchase
+                        </Button>
+                      ) : (
+                        <div className="flex gap-2">
+                          <Button variant="outline" size="sm" className="h-8" onClick={handleCancel} disabled={saving}>
+                            Cancel
+                          </Button>
+                          <Button size="sm" className="h-8" onClick={handleSave} disabled={saving}>
+                            {saving ? <Loader2 className="h-3.5 w-3.5 mr-2 animate-spin" /> : <Save className="h-3.5 w-3.5 mr-2" />}
+                            Save
+                          </Button>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
-              )}
-            </>
-          )}
+            </div>
+
+            {/* Mobile: Stacked rows (unchanged logic just properly placed) */}
+            <div className="lg:hidden space-y-3 w-full">
+              {/* Row 1: Location & Search */}
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1 justify-between text-left h-10"
+                  onClick={() => setIsLocationSelectorOpen(true)}
+                  disabled={isEditMode}
+                >
+                  <div className="flex items-center gap-2 truncate">
+                    <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
+                    <span className={selectedLocation ? "font-medium truncate" : "text-muted-foreground truncate"}>
+                      {selectedLocation ? selectedLocation.name : "Select Location"}
+                    </span>
+                  </div>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                </Button>
+                <div className="relative flex-1">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="search"
+                    placeholder="Search..."
+                    className="w-full pl-8 h-10"
+                    value={searchQuery}
+                    onChange={(e) => updateUrl("q", e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Row 2: Date & Update Button */}
+              <div className="flex gap-2 items-center">
+                <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" onClick={handlePrevDay} disabled={isEditMode}>
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <div className="relative">
+                  <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                  <Input
+                    type="date"
+                    value={dateInputValue}
+                    onChange={handleDateChange}
+                    className="w-[130px] pl-8 h-10 text-xs"
+                    disabled={isEditMode}
+                  />
+                </div>
+                <Button variant="outline" size="icon" className="h-10 w-10 shrink-0" onClick={handleNextDay} disabled={isEditMode}>
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                <div className="flex-1" />
+                {selectedLocation && locationItems.length > 0 && (
+                  <>
+                    {!isEditMode ? (
+                      <Button onClick={handleUpdateStock} size="icon" className="h-10 w-10 shrink-0">
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    ) : (
+                      <div className="flex gap-2 shrink-0">
+                        <Button variant="outline" size="icon" className="h-10 w-10" onClick={handleCancel} disabled={saving}>
+                          <ChevronLeft className="h-4 w-4" />
+                        </Button>
+                        <Button size="icon" className="h-10 w-10" onClick={handleSave} disabled={saving}>
+                          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
         </div>
       </div>
 
@@ -682,7 +767,7 @@ function StockPurchaseContent() {
           <>
             {/* Mobile/Tablet Card View */}
             <div className="lg:hidden grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {paginatedItems.map((item) => {
+              {displayedItems.map((item) => {
                 const purchasedUnit = getDisplayValue(item._id, "purchasedUnit");
                 const purchasedPackage = getDisplayValue(item._id, "purchasedPackage");
                 const closingUnit = item.openingBalanceUnit + Number(purchasedUnit || 0);
@@ -787,7 +872,7 @@ function StockPurchaseContent() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paginatedItems.map((item) => {
+                  {displayedItems.map((item) => {
                     const purchasedUnit = getDisplayValue(item._id, "purchasedUnit");
                     const purchasedPackage = getDisplayValue(item._id, "purchasedPackage");
                     const closingUnit = item.openingBalanceUnit + Number(purchasedUnit || 0);
@@ -852,34 +937,21 @@ function StockPurchaseContent() {
         )}
       </div>
       
-      {/* Pagination Controls */}
-      {!loading && filteredItems.length > 0 && (
-        <div className="flex-none flex items-center justify-between p-3 border-t bg-white">
-          <div className="text-xs text-muted-foreground">
-            {(currentPage - 1) * itemsPerPage + 1}-{Math.min(currentPage * itemsPerPage, filteredItems.length)} of {filteredItems.length}
-          </div>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-              disabled={currentPage === 1}
-            >
-              <ChevronLeft className="h-4 w-4" />
-              <span className="hidden sm:inline ml-1">Previous</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-              disabled={currentPage === totalPages}
-            >
-              <span className="hidden sm:inline mr-1">Next</span>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      )}
+      {/* Observer Target for Infinite Scroll */}
+      <div ref={observerTarget} className="p-4 text-center text-sm text-muted-foreground w-full">
+          {displayedItems.length < filteredItems.length ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin mx-auto mb-2" />
+              Loading more items...
+            </>
+          ) : (
+            displayedItems.length > 0 && "No more items"
+          )}
+      </div>
+
+      <div className="p-4 border-t bg-white text-xs text-muted-foreground text-center">
+        Showing {displayedItems.length} of {filteredItems.length} items
+      </div>
 
       {/* Location Selector Dialog */}
       <Dialog open={isLocationSelectorOpen} onOpenChange={setIsLocationSelectorOpen}>

@@ -62,12 +62,21 @@ export async function POST(request: NextRequest) {
     }
     
     // Create UTC date for the specific day
+    // Create UTC date for the specific day (Start of Day for query)
     const [year, month, day] = date.split('-').map(Number);
-    const transactionDate = new Date(Date.UTC(year, month - 1, day));
+    const startOfDay = new Date(Date.UTC(year, month - 1, day));
+    const endOfDay = new Date(Date.UTC(year, month - 1, day, 23, 59, 59, 999));
+
+    // For Saving: Use selected date + current time to ensure proper ordering
+    const now = new Date();
+    const saveDate = new Date(Date.UTC(
+      year, month - 1, day,
+      now.getUTCHours(), now.getUTCMinutes(), now.getUTCSeconds(), now.getUTCMilliseconds()
+    ));
     
     // Construct update object dynamically to avoid overwriting existing values with 0 if not provided
     const updateData: any = {
-      date: transactionDate,
+      date: saveDate,
       item,
       location,
     };
@@ -79,24 +88,29 @@ export async function POST(request: NextRequest) {
     if (body.soakUnit !== undefined) updateData.soakUnit = body.soakUnit;
     if (body.consumedUnit !== undefined) updateData.consumedUnit = body.consumedUnit;
     if (body.consumedPackage !== undefined) updateData.consumedPackage = body.consumedPackage;
+    if (body.source !== undefined) updateData.source = body.source;
 
-    // Upsert: Update if exists for same date/item/location, otherwise create
-    // IMPORTANT: For the MAIN transaction (from the form), relatedParentItem should be null/undefined
+    // Upsert: Update if exists for same date/item/location/source, otherwise create
+    // Using source in the query ensures Stock Count and Daily Occupancy transactions are separate
+    const sourceMatch = body.source ? { source: body.source } : { source: { $exists: false } };
+    
     const transaction = await Transaction.findOneAndUpdate(
       {
         date: {
-          $gte: transactionDate,
-          $lt: new Date(transactionDate.getTime() + 24 * 60 * 60 * 1000),
+          $gte: startOfDay,
+          $lte: endOfDay,
         },
         item,
         location,
-        relatedParentItem: { $exists: false } // Ensures we don't overwrite a child transaction that accidentally matches
+        relatedParentItem: { $exists: false }, // Ensures we don't overwrite a child transaction
+        ...sourceMatch // Different sources = different transactions
       },
       updateData,
       {
         upsert: true,
         new: true,
-        setDefaultsOnInsert: true,
+        // Don't apply defaults for Daily Occupancy - we only want consumedUnit
+        setDefaultsOnInsert: body.source !== "Daily Occupancy",
       }
     );
 
@@ -111,10 +125,11 @@ export async function POST(request: NextRequest) {
 
         const qtyMultiplier = bundleItem.quantity || 1;
         const childUpdateData: any = {
-          date: transactionDate,
+          date: saveDate,
           item: bundleItem.item,
           location,
           relatedParentItem: item, // Link to parent
+          source: transaction.source || body.source, // Propagate source (e.g. "Stock Count")
         };
 
         // Calculate proportional values based on the PARENT transaction's current state
@@ -129,8 +144,8 @@ export async function POST(request: NextRequest) {
         await Transaction.findOneAndUpdate(
           {
             date: {
-              $gte: transactionDate,
-              $lt: new Date(transactionDate.getTime() + 24 * 60 * 60 * 1000),
+              $gte: startOfDay,
+              $lte: endOfDay,
             },
             item: bundleItem.item,
             location,

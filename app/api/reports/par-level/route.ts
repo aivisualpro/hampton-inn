@@ -26,17 +26,36 @@ export async function GET() {
         // 3. Fetch Locations
         const locations = await Location.find().lean();
         
+        // Helper to get package size
+        const getPackageSize = (pkgStr?: string) => {
+            if (!pkgStr) return 1;
+            const match = pkgStr.match(/(\d+)/);
+            return match ? parseInt(match[0], 10) : 1;
+        };
+
+        // Create Map of Items for package size lookup
+        const itemMap = new Map();
+        items.forEach(i => itemMap.set(i._id.toString(), i));
+
         // 4. Fetch Latest Stock Counts
         // Group by Item + Location, get the latest transaction's countedUnit
         const stockData = await Transaction.aggregate([
             { $match: { item: { $in: itemIds } } },
             { $group: {
                 _id: { item: "$item", location: "$location" },
-                latestCount: { 
+                unitDelta: { 
                     $sum: { 
                         $subtract: [ 
                             { $add: [ { $ifNull: ["$purchasedUnit", 0] }, { $ifNull: ["$soakUnit", 0] } ] }, 
                             { $ifNull: ["$consumedUnit", 0] } 
+                        ] 
+                    } 
+                },
+                packageDelta: { 
+                    $sum: { 
+                        $subtract: [ 
+                            { $add: [ { $ifNull: ["$purchasedPackage", 0] }, { $ifNull: ["$soakPackage", 0] } ] }, 
+                            { $ifNull: ["$consumedPackage", 0] } 
                         ] 
                     } 
                 }
@@ -48,8 +67,15 @@ export async function GET() {
         stockData.forEach((record: any) => {
             const itemId = record._id.item;
             const locationId = record._id.location;
+            
+            const item = itemMap.get(itemId);
+            const pkgSize = item ? getPackageSize(item.package) : 1;
+            
+            // Calculate Total Count (Units + Packages * Size)
+            const totalCount = record.unitDelta + (record.packageDelta * pkgSize);
+
             if (!stockMap[itemId]) stockMap[itemId] = {};
-            stockMap[itemId][locationId] = record.latestCount;
+            stockMap[itemId][locationId] = totalCount;
         });
         
         return NextResponse.json({

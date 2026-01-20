@@ -38,13 +38,13 @@ export default function Home() {
       href: "/admin",
     },
     {
-      title: "Stock Count",
-      description: "Manage inventory levels",
-      icon: ClipboardList,
-      color: "text-blue-600",
-      image: "/bg_stock_count.png",
-      value: "124 Items",
-      href: "/stock-count",
+      title: "Stock Purchase",
+      description: "Order new supplies",
+      icon: ShoppingCart,
+      color: "text-emerald-600",
+      image: "/bg_stock_purchase.png",
+      value: "3 Pending",
+      href: "/stock-purchase",
     },
     {
       title: "Soak Cycle",
@@ -56,15 +56,6 @@ export default function Home() {
       href: "/soak-cycle",
     },
     {
-      title: "Stock Purchase",
-      description: "Order new supplies",
-      icon: ShoppingCart,
-      color: "text-emerald-600",
-      image: "/bg_stock_purchase.png",
-      value: "3 Pending",
-      href: "/stock-purchase",
-    },
-    {
       title: "Daily Occupancy",
       description: "Track daily room occupancy",
       icon: Hotel,
@@ -73,7 +64,15 @@ export default function Home() {
       value: "View",
       href: "/daily-occupancy",
     },
-
+    {
+      title: "Stock Count",
+      description: "Manage inventory levels",
+      icon: ClipboardList,
+      color: "text-blue-600",
+      image: "/bg_stock_count.png",
+      value: "124 Items",
+      href: "/stock-count",
+    },
   ];
 
   return (

@@ -28,6 +28,18 @@ export function PageTitle() {
   if (isObjectId) {
     return null; // Or return generic "Details" if preferred, but user asked to remove ID.
   }
+
+  // Hide title for par-level report as requested
+  // Hide title for par-level report as requested
+  if (
+    lastSegment === "par-level" || 
+    lastSegment === "stock-purchase" ||
+    lastSegment === "stock-count" ||
+    lastSegment === "soak-cycle" ||
+    lastSegment === "daily-occupancy"
+  ) {
+      return null;
+  }
   
   const title = TITLE_MAP[lastSegment] || 
     (lastSegment ? lastSegment.charAt(0).toUpperCase() + lastSegment.slice(1) : "");

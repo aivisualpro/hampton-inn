@@ -16,10 +16,11 @@ export async function GET(request: NextRequest) {
     }
 
     const [year, month, day] = dateStr.split('-').map(Number);
-    const date = new Date(Date.UTC(year, month - 1, day)); // Strict UTC Midnight
+    const targetDate = new Date(Date.UTC(year, month - 1, day)); // Strict UTC Midnight
 
     const matchQuery: any = {
-      date: { $lt: date }
+      date: { $lt: targetDate },  // BEFORE target date (previous day's closing)
+      source: { $ne: "Daily Occupancy" }  // Exclude consumption records
     };
 
     // Handle Location as String or ObjectId to be safe in Aggregation
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
     }
 
     const openingBalances = await Transaction.aggregate([
-      // 1. Match transactions for filtered location and strictly BEFORE the selected date
+      // 1. Match transactions for filtered location UP TO AND INCLUDING the selected date
       { 
         $match: matchQuery
       },

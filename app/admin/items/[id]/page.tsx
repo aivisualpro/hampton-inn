@@ -98,6 +98,15 @@ export default function ItemDetailsPage() {
 
   const hasPackage = Boolean(item.package && item.package !== "0");
 
+  const getPackageSize = (packageStr?: string): number => {
+    if (!packageStr) return 1;
+    const match = packageStr.match(/(\d+)/);
+    return match ? parseInt(match[0], 10) : 1;
+  };
+
+  const packageSize = getPackageSize(item.package);
+  const grandTotalCount = (totalPackages * packageSize) + totalUnits;
+
   return (
     <div className="flex h-full flex-col gap-6 p-6">
       <div className="flex items-center justify-between">
@@ -191,6 +200,7 @@ export default function ItemDetailsPage() {
                     <TableHead>Location</TableHead>
                     <TableHead className="text-center">Units</TableHead>
                     {hasPackage && <TableHead className="text-center">Packages</TableHead>}
+                    <TableHead className="text-center font-bold text-green-600">Total Count</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -199,6 +209,7 @@ export default function ItemDetailsPage() {
                       <TableCell className="font-medium">{stock.locationName}</TableCell>
                       <TableCell className="text-center">{stock.totalUnit}</TableCell>
                       {hasPackage && <TableCell className="text-center">{stock.totalPackage}</TableCell>}
+                      <TableCell className="text-center font-bold text-green-600">{(stock.totalPackage * packageSize) + stock.totalUnit}</TableCell>
                     </TableRow>
                   ))}
                   {/* Totals Row */}
@@ -206,6 +217,7 @@ export default function ItemDetailsPage() {
                     <TableCell>Total</TableCell>
                     <TableCell className="text-center text-blue-600">{totalUnits}</TableCell>
                     {hasPackage && <TableCell className="text-center text-blue-600">{totalPackages}</TableCell>}
+                    <TableCell className="text-center font-extrabold text-green-700">{grandTotalCount}</TableCell>
                   </TableRow>
                 </TableBody>
               </Table>

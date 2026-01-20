@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, Suspense } from "react";
+import { useEffect, useState, useCallback, Suspense, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { Loader2, MapPin, ChevronDown, Calendar, Pencil, Save, ChevronRight, Search, ChevronLeft } from "lucide-react";
@@ -21,6 +21,15 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 type Location = {
   _id: string;
@@ -45,6 +54,12 @@ type Transaction = {
   location: string;
   countedUnit: number;
   countedPackage: number;
+  purchasedUnit?: number;
+  purchasedPackage?: number;
+  consumedUnit?: number;
+  consumedPackage?: number;
+  soakUnit?: number;
+  soakPackage?: number;
 };
 
 type ItemWithCount = Item & {
@@ -100,12 +115,13 @@ function StockCountContent() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [allLocations, setAllLocations] = useState<Location[]>([]);
   const [userLocations, setUserLocations] = useState<Location[]>([]);
+  const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [allItems, setAllItems] = useState<Item[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [isLocationSelectorOpen, setIsLocationSelectorOpen] = useState(false);
-  const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editedValues, setEditedValues] = useState<EditedValues>({});
   const { toast } = useToast();
@@ -188,12 +204,38 @@ function StockCountContent() {
     saveDatePreference(newDateStr);
   };
 
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 20;
+  const [visibleCount, setVisibleCount] = useState(20);
+  const observerTarget = useRef<HTMLDivElement>(null);
 
+  // Reset visible count on search or location/date change
   useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery]);
+    setVisibleCount(20);
+  }, [searchQuery, selectedLocation, selectedDate]);
+
+  // Infinite Scroll Observer
+  useEffect(() => {
+    if (loading) return;
+    
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setVisibleCount((prev) => prev + 20);
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    const currentTarget = observerTarget.current;
+    if (currentTarget) {
+      observer.observe(currentTarget);
+    }
+
+    return () => {
+      if (currentTarget) {
+        observer.unobserve(currentTarget);
+      }
+    };
+  }, [loading]);
 
   // Fetch current user
   const fetchCurrentUser = async () => {
@@ -258,8 +300,12 @@ function StockCountContent() {
       const data = await response.json();
 
       if (data.transactions) {
-        // Convert map back to array for compatibility
-        setTransactions(Object.values(data.transactions));
+        // Convert map back to array, adding the item ID to each transaction
+        const txnArray = Object.entries(data.transactions).map(([itemId, values]: [string, any]) => ({
+          item: itemId,
+          ...values,
+        }));
+        setTransactions(txnArray);
       }
       
       if (data.openingBalances) {
@@ -458,11 +504,7 @@ function StockCountContent() {
     });
 
     if (errors.length > 0) {
-        toast({
-            variant: "destructive",
-            title: "Validation Error",
-            description: errors[0] // Show first error
-        });
+        setValidationError(errors[0]);
         return;
     }
 
@@ -523,21 +565,53 @@ function StockCountContent() {
            const pkgSize = getPackageSize(itemDef?.package);
            const totalOpening = (openingPackage * pkgSize) + openingUnit;
            
+           const txnInfo = transactions.find(t => t.item === itemId);
+           const todayPurchasedUnit = txnInfo?.purchasedUnit || 0;
+           const todayPurchasedPackage = txnInfo?.purchasedPackage || 0;
+           const totalPurchasedToday = (todayPurchasedPackage * pkgSize) + todayPurchasedUnit;
+           
+           const todayConsumedUnit = txnInfo?.consumedUnit || 0;
+           const todayConsumedPackage = txnInfo?.consumedPackage || 0;
+           const totalConsumedToday = (todayConsumedPackage * pkgSize) + todayConsumedUnit;
+           
+           const todaySoakUnit = txnInfo?.soakUnit || 0;
+           const todaySoakPackage = txnInfo?.soakPackage || 0; // Assuming soak supports packages? combined API supports it.
+           const totalSoakToday = (todaySoakPackage * pkgSize) + todaySoakUnit;
+
+           const totalAvailable = totalOpening + totalPurchasedToday - totalConsumedToday - totalSoakToday;
+
            let consumedUnit = 0;
            let consumedPackage = 0;
            let purchasedUnit = 0;
            let purchasedPackage = 0;
 
-           if (totalOpening === 0) {
-               // Initial Stock -> Treat as Purchase/Found
-               purchasedUnit = valCountedUnit;
-               purchasedPackage = valCountedPackage;
+           const totalCounted = (valCountedPackage * pkgSize) + valCountedUnit;
+           const diff = totalCounted - totalAvailable;
+
+           if (diff > 0) {
+               // Counted > Available -> Found extra items (Treat as Purchase Adjustment)
+               // We add this adjustment to any existing purchase
+               // But usually Stock Count adjustment is separate. 
+               // Based on API fix, we might want to store this as the ONLY purchase value for this source?
+               // Yes, source="Stock Count". So this purchasedUnit is the adjustment.
+               
+               const diffPkg = Math.floor(diff / pkgSize);
+               const diffUnit = diff % pkgSize;
+               
+               purchasedUnit = diffUnit;
+               purchasedPackage = diffPkg;
                consumedUnit = 0;
                consumedPackage = 0;
            } else {
-               // Regular Count -> Treat as Consumption (Difference)
-               consumedUnit = openingUnit - valCountedUnit;
-               consumedPackage = openingPackage - valCountedPackage;
+               // Available >= Counted -> Consumed items
+               const consumption = -diff; // Positive consumption
+               const consPkg = Math.floor(consumption / pkgSize);
+               const consUnit = consumption % pkgSize;
+               
+               consumedUnit = consUnit;
+               consumedPackage = consPkg;
+               purchasedUnit = 0;
+               purchasedPackage = 0;
            }
 
         return fetch("/api/transactions", {
@@ -553,6 +627,7 @@ function StockCountContent() {
             consumedPackage: consumedPackage,
             purchasedUnit: purchasedUnit,
             purchasedPackage: purchasedPackage,
+            source: "Stock Count",
           }),
         });
       })
@@ -612,11 +687,7 @@ function StockCountContent() {
     item.item.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
-  const paginatedItems = filteredItems.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
+  const displayedItems = filteredItems.slice(0, visibleCount);
 
   // Get display value (edited value if in edit mode, otherwise transaction value)
   const getDisplayValue = (itemId: string, field: "countedUnit" | "countedPackage") => {
@@ -636,11 +707,13 @@ function StockCountContent() {
       {/* Top Controls */}
       <div className="border-b bg-white px-4 py-3">
         {/* Breadcrumbs */}
-        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3 md:hidden">
           <Link href="/" className="hover:text-primary hover:underline">Home</Link>
           <ChevronRight className="h-4 w-4" />
           <span className="font-medium text-foreground">Stock Count</span>
         </div>
+        {/* Breadcrumbs */}
+
 
         {/* Mobile: Stacked rows */}
         <div className="md:hidden space-y-3">
@@ -714,6 +787,12 @@ function StockCountContent() {
 
         {/* Desktop: Single row */}
         <div className="hidden md:flex gap-3 items-center">
+          {/* Breadcrumbs (Inline) */}
+           <div className="flex items-center gap-2 text-sm text-muted-foreground mr-2">
+             <Link href="/" className="hover:text-primary hover:underline">Home</Link>
+             <ChevronRight className="h-4 w-4" />
+             <span className="font-medium text-foreground">Stock Count</span>
+           </div>
           {/* Location Selector */}
           <Button
             variant="outline"
@@ -819,7 +898,7 @@ function StockCountContent() {
           <>
             {/* Mobile/Tablet Card View */}
             <div className="lg:hidden grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {paginatedItems.map((item) => (
+              {displayedItems.map((item) => (
                 <div key={item._id} className="bg-white rounded-xl shadow-sm border p-4 space-y-3">
                   {/* Item Name */}
                   <div className="flex items-center justify-between">
@@ -907,7 +986,7 @@ function StockCountContent() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {paginatedItems.map((item) => (
+                  {displayedItems.map((item) => (
                     <TableRow key={item._id}>
                       <TableCell className="font-medium pl-4">
                         <Link href={`/admin/items/${item._id}`} className="hover:underline hover:text-primary">
@@ -963,36 +1042,23 @@ function StockCountContent() {
             </div>
           </>
         )}
+        
+        {/* Observer Target for Infinite Scroll - Moved INSIDE scroll container */}
+        <div ref={observerTarget} className="p-4 text-center text-sm text-muted-foreground w-full">
+            {displayedItems.length < filteredItems.length ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin mx-auto mb-2" />
+                Loading more items...
+              </>
+            ) : (
+              displayedItems.length > 0 && "No more items"
+            )}
+        </div>
       </div>
       
-      {/* Pagination Controls */}
-      {!loading && filteredItems.length > 0 && (
-        <div className="flex-none flex items-center justify-between p-3 border-t bg-white">
-          <div className="text-xs text-muted-foreground">
-            {(currentPage - 1) * itemsPerPage + 1}-{Math.min(currentPage * itemsPerPage, filteredItems.length)} of {filteredItems.length}
-          </div>
-          <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-              disabled={currentPage === 1}
-            >
-              <ChevronLeft className="h-4 w-4" />
-              <span className="hidden sm:inline ml-1">Previous</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
-              disabled={currentPage === totalPages}
-            >
-              <span className="hidden sm:inline mr-1">Next</span>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      )}
+      <div className="p-4 border-t bg-white text-xs text-muted-foreground text-center">
+        Showing {displayedItems.length} of {filteredItems.length} items
+      </div>
 
       {/* Location Selector Dialog */}
       <Dialog open={isLocationSelectorOpen} onOpenChange={setIsLocationSelectorOpen}>
@@ -1038,6 +1104,25 @@ function StockCountContent() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Validation Error Alert */}
+      <AlertDialog open={!!validationError} onOpenChange={(open) => !open && setValidationError(null)}>
+        <AlertDialogContent className="bg-red-50 border-red-200 text-red-900 border-2">
+            <AlertDialogHeader>
+                <AlertDialogTitle className="text-red-900 flex items-center gap-2">
+                    Validation Error
+                </AlertDialogTitle>
+                <AlertDialogDescription className="text-red-800 font-medium">
+                    {validationError}
+                </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+                <AlertDialogAction onClick={() => setValidationError(null)} className="bg-red-100 text-red-900 hover:bg-red-200 border border-red-200">
+                    Okay
+                </AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

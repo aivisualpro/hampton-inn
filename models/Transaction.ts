@@ -12,6 +12,7 @@ export interface ITransaction extends Document {
   consumedPackage: number;
   soakUnit: number; // For tracking items in soak cycle
   relatedParentItem?: string;
+  source?: string; // e.g. "Stock Count", "Manual", "Import"
   createdAt: Date;
   updatedAt: Date;
 }
@@ -29,6 +30,7 @@ const TransactionSchema: Schema = new Schema(
     consumedPackage: { type: Number, default: 0 },
     soakUnit: { type: Number, default: 0 },
     relatedParentItem: { type: Schema.Types.ObjectId, ref: "Item", required: false },
+    source: { type: String, required: false },
   },
   {
     timestamps: true,

@@ -61,26 +61,32 @@ type Transaction = {
   purchasedPackage?: number;
   createdAt: string;
   relatedParentItem?: string;
+  source?: string;
 };
 
 const TransactionIcon = ({ t }: { t: Partial<Transaction> }) => {
     const icons = [];
-    if ((t.soakUnit || 0) > 0) {
-        icons.push(<Droplets key="soak" className="h-4 w-4 text-cyan-500" />);
-    }
-    if ((t.purchasedUnit || 0) > 0) {
-        icons.push(<ShoppingCart key="buy" className="h-4 w-4 text-blue-600" />);
-    }
-    // Consumed usually means Daily Occupancy/Used
-    if ((t.consumedUnit || 0) > 0) {
-        icons.push(<BedDouble key="use" className="h-4 w-4 text-orange-500" />);
-    }
+    
+    // If source is Soak Cycle, show purely the Droplets icon
+    if (t.source === "Soak Cycle") {
+         icons.push(<Droplets key="soak" className="h-4 w-4 text-cyan-500" />);
+    } else {
+        // Standard logic for other transactions
+        if ((t.soakUnit || 0) > 0) {
+            icons.push(<Droplets key="soak" className="h-4 w-4 text-cyan-500" />);
+        }
+        if (((t.purchasedUnit || 0) > 0 || (t.purchasedPackage || 0) > 0) && t.source !== "Stock Count") {
+            icons.push(<ShoppingCart key="buy" className="h-4 w-4 text-blue-600" />);
+        }
+        // Consumed usually means Daily Occupancy/Used
+        if ((t.consumedUnit || 0) > 0 && t.source !== "Stock Count") {
+            icons.push(<BedDouble key="use" className="h-4 w-4 text-orange-500" />);
+        }
 
-    // specific check: if ONLY count changed or others are 0, it's a Stock Count
-    // But usually we just want to show what happened.
-    // If no specific action icons, show Count icon
-    if (icons.length === 0) {
-        icons.push(<ClipboardList key="count" className="h-4 w-4 text-teal-600" />);
+        // If explicit Stock Count source, OR no other icons, show Count icon
+        if (t.source === "Stock Count" || icons.length === 0) {
+            icons.push(<ClipboardList key="count" className="h-4 w-4 text-teal-600" />);
+        }
     }
 
     return <div className="flex gap-1 items-center justify-center">{icons}</div>;
@@ -361,25 +367,50 @@ export function TransactionsList({ itemId, headerContent }: TransactionsListProp
         const prev = runningTotals[key] || { unit: 0, pkg: 0 };
         const prevGlobal = globalTotals[itemKey] || { unit: 0, pkg: 0 };
         
-        const changeUnit = (t.purchasedUnit || 0) + (t.soakUnit || 0) - (t.consumedUnit || 0);
-        const changePkg = (t.purchasedPackage || 0) + (t.soakPackage || 0) - (t.consumedPackage || 0);
+        let closingUnitVal = 0;
+        let closingPkgVal = 0;
 
-        const closingUnit = (prev.unit || 0) + changeUnit;
-        const closingPkg = (prev.pkg || 0) + changePkg;
+        if (t.source === "Stock Count" && (t.countedUnit !== undefined || t.countedPackage !== undefined)) {
+            if (t.relatedParentItem) {
+                // Bundle-derived count -> Additive (e.g. counting sets adds to pillowcases)
+                const changeUnit = (t.countedUnit || 0);
+                const changePkg = (t.countedPackage || 0);
+                
+                closingUnitVal = (prev.unit || 0) + changeUnit;
+                closingPkgVal = (prev.pkg || 0) + changePkg;
+            } else {
+                // Main Count -> Reset (e.g. counting loose pillowcases resets balance)
+                // CAUTION: This assumes Main Count is entered BEFORE Bundle Counts on the same day, 
+                // or acts as the "Base". If entered after, it wipes Bundle counts.
+                closingUnitVal = t.countedUnit || 0;
+                closingPkgVal = t.countedPackage || 0;
+            }
+        } else {
+            // Calculate change from deltas
+            const changeUnit = (t.purchasedUnit || 0) + (t.soakUnit || 0) - (t.consumedUnit || 0);
+            const changePkg = (t.purchasedPackage || 0) + (t.soakPackage || 0) - (t.consumedPackage || 0);
+            
+            closingUnitVal = (prev.unit || 0) + changeUnit;
+            closingPkgVal = (prev.pkg || 0) + changePkg;
+        }
+
+        // Calculate effective change to apply to global totals
+        const diffUnit = closingUnitVal - (prev.unit || 0);
+        const diffPkg = closingPkgVal - (prev.pkg || 0);
         
-        const globalUnit = (prevGlobal.unit || 0) + changeUnit;
-        const globalPkg = (prevGlobal.pkg || 0) + changePkg;
+        const globalUnit = (prevGlobal.unit || 0) + diffUnit;
+        const globalPkg = (prevGlobal.pkg || 0) + diffPkg;
         
         map.set(t._id, { 
             opening: prev.unit, 
-            closing: closingUnit, 
+            closing: closingUnitVal, 
             openingPkg: prev.pkg, 
-            closingPkg: closingPkg,
+            closingPkg: closingPkgVal,
             totalBalanceUnit: globalUnit,
             totalBalancePkg: globalPkg
         });
         
-        runningTotals[key] = { unit: closingUnit, pkg: closingPkg };
+        runningTotals[key] = { unit: closingUnitVal, pkg: closingPkgVal };
         globalTotals[itemKey] = { unit: globalUnit, pkg: globalPkg };
     });
 
@@ -710,7 +741,13 @@ export function TransactionsList({ itemId, headerContent }: TransactionsListProp
                          <div className="pr-16 mb-2">
                              <div className="flex items-center gap-2 mb-1">
                                 <TransactionIcon t={currentT} />
-                                {!itemId && <div className="font-semibold text-sm">{items[t.item]?.item || t.item}</div>}
+                                {!itemId && (
+                                    <div className="font-semibold text-sm">
+                                        <Link href={`/admin/items/${t.item}`} className="hover:underline text-blue-600 hover:text-blue-800">
+                                            {items[t.item]?.item || t.item}
+                                        </Link>
+                                    </div>
+                                )}
                              </div>
                              <div className="text-muted-foreground flex items-center gap-1">
                                  {isMassEditMode ? (
@@ -766,10 +803,11 @@ export function TransactionsList({ itemId, headerContent }: TransactionsListProp
                         {!itemId && <TableHead className="w-[150px]">Item</TableHead>}
                         <TableHead className="text-center bg-gray-100/50">Opening</TableHead>
                         <TableHead className="text-center">Counted</TableHead>
+                        <TableHead className="text-center text-blue-600">Purchased</TableHead>
+                        <TableHead className="text-center text-cyan-600">Soak</TableHead>
                         <TableHead className="text-center text-red-600">Cons/Disp</TableHead>
-                        <TableHead className="text-center text-blue-600">Purch/Soak</TableHead>
                         <TableHead className="text-center font-bold bg-gray-100/50">Closing</TableHead>
-                        <TableHead className="text-center font-bold text-green-700 bg-green-50/50">Total Balance</TableHead>
+                        <TableHead className="text-center font-bold text-green-700 bg-green-50/50">Balance</TableHead>
                         <TableHead className="w-[50px]"></TableHead>
                     </TableRow>
                 </TableHeader>
@@ -808,24 +846,40 @@ export function TransactionsList({ itemId, headerContent }: TransactionsListProp
                                 const purchSoakUnit = (currentT.purchasedUnit || 0) + (currentT.soakUnit || 0);
                                 const purchSoakPackage = (currentT.purchasedPackage || 0) + (currentT.soakPackage || 0);
 
-                                const CellDisplay = ({ pkg, unit, fieldPkg, fieldUnit, isEdit }: { 
+                                const getPackageSize = (itemId: string): number => {
+                                    const item = items[itemId];
+                                    if (!item?.package) return 1;
+                                    const match = item.package.match(/(\d+)/);
+                                    return match ? parseInt(match[0], 10) : 1;
+                                };
+
+                                const calculateTotalCount = (pkg: number, unit: number, itemId: string) => {
+                                    const size = getPackageSize(itemId);
+                                    return (pkg * size) + unit;
+                                };
+
+                                const CellDisplay = ({ pkg, unit, itemId, fieldPkg, fieldUnit, isEdit, showTotalOnly = false, isStockDisplay = false }: { 
                                     pkg?: number; 
                                     unit?: number; 
+                                    itemId: string;
                                     fieldPkg?: keyof Transaction; 
                                     fieldUnit?: keyof Transaction; 
                                     isEdit?: boolean;
+                                    showTotalOnly?: boolean;
+                                    isStockDisplay?: boolean;
                                 }) => {
-                                    const itemDef = items[t.item];
+                                    const itemDef = items[itemId];
                                     const hasPackage = !!itemDef?.package && itemDef.package !== "0";
-                                    
+                                    const totalCount = calculateTotalCount(pkg || 0, unit || 0, itemId);
+
                                     if (isEdit && fieldPkg && fieldUnit) {
                                          return (
-                                            <div className="flex flex-col gap-1 items-center">
+                                            <div className="flex gap-2 items-center justify-center">
                                                 {hasPackage && (
                                                     <div className="relative">
                                                         <Box className="absolute left-1 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground opacity-50" />
                                                         <Input 
-                                                            className="h-6 w-14 pl-4 text-center text-[10px]" 
+                                                            className="h-6 w-12 pl-4 text-center text-[10px]" 
                                                             placeholder="P"
                                                             value={currentT[fieldPkg] as number ?? 0}
                                                             onChange={(e) => handleMassEditChange(t._id, fieldPkg, parseInt(e.target.value)||0)}
@@ -835,7 +889,7 @@ export function TransactionsList({ itemId, headerContent }: TransactionsListProp
                                                 <div className="relative">
                                                      <Circle className="absolute left-1 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground opacity-50" />
                                                      <Input 
-                                                       className="h-6 w-14 pl-4 text-center text-[10px]" 
+                                                       className="h-6 w-12 pl-4 text-center text-[10px]" 
                                                        placeholder="U"
                                                        value={currentT[fieldUnit] as number ?? 0}
                                                        onChange={(e) => handleMassEditChange(t._id, fieldUnit, parseInt(e.target.value)||0)}
@@ -844,6 +898,45 @@ export function TransactionsList({ itemId, headerContent }: TransactionsListProp
                                             </div>
                                          );
                                     }
+
+                                    if (showTotalOnly) {
+                                        return <span className="font-bold">{totalCount}</span>;
+                                    }
+
+                                    if (isStockDisplay) {
+                                         // opening/counted/etc format: 1 / 20 (70)
+                                         // Normalize display to be greedy with packages
+                                         let dispPkg = pkg || 0;
+                                         let dispUnit = unit || 0;
+
+                                         if (hasPackage) {
+                                             const size = getPackageSize(itemId);
+                                             if (size > 1) {
+                                                 dispPkg = Math.floor(totalCount / size);
+                                                 dispUnit = totalCount % size;
+                                             }
+                                         }
+                                         
+                                         return (
+                                            <div className="flex flex-col items-center text-[10px]">
+                                                <div className="flex items-center gap-1">
+                                                    {hasPackage && (
+                                                        <>
+                                                            <span className="font-mono">{dispPkg}</span>
+                                                            <span className="text-muted-foreground">/</span>
+                                                        </>
+                                                    )}
+                                                    <span className="font-mono">{dispUnit}</span>
+                                                </div>
+                                                {hasPackage && (
+                                                    <div className="text-muted-foreground font-semibold">
+                                                        ({totalCount})
+                                                    </div>
+                                                )}
+                                            </div>
+                                         );
+                                    }
+
                                     return (
                                         <div className="flex flex-col items-center justify-center gap-0.5 text-[10px]">
                                              {hasPackage && (
@@ -889,7 +982,9 @@ export function TransactionsList({ itemId, headerContent }: TransactionsListProp
                                      {!itemId && (
                                          <TableCell className="text-xs font-medium text-gray-700">
                                             <div>
-                                                {items[t.item]?.item || t.item}
+                                                <Link href={`/admin/items/${t.item}`} className="hover:underline text-blue-600 hover:text-blue-800">
+                                                    {items[t.item]?.item || t.item}
+                                                </Link>
                                                 {t.relatedParentItem && (
                                                   <span className="block text-[10px] text-muted-foreground">
                                                     (via {items[t.relatedParentItem]?.item || "Parent Item"})
@@ -899,22 +994,41 @@ export function TransactionsList({ itemId, headerContent }: TransactionsListProp
                                         </TableCell>
                                      )}
                                     <TableCell className="text-center font-mono text-xs bg-gray-50/50 text-gray-600">
-                                        <CellDisplay pkg={openingPackage} unit={openingUnit} />
+                                        <CellDisplay pkg={openingPackage} unit={openingUnit} itemId={t.item} isStockDisplay />
                                     </TableCell>
                                     <TableCell className="text-center font-mono text-xs">
-                                        <CellDisplay pkg={currentT.countedPackage} unit={currentT.countedUnit} isEdit={isMassEditMode} fieldPkg="countedPackage" fieldUnit="countedUnit" />
-                                    </TableCell>
-                                    <TableCell className="text-center font-mono text-xs text-red-600">
-                                        <CellDisplay pkg={currentT.consumedPackage} unit={currentT.consumedUnit} isEdit={isMassEditMode} fieldPkg="consumedPackage" fieldUnit="consumedUnit" />
+                                        {currentT.source === "Soak Cycle" || currentT.source === "Daily Occupancy" || currentT.source === "Stock Purchase" ? (
+                                            <span className="text-muted-foreground">-</span>
+                                        ) : (
+                                            <CellDisplay pkg={currentT.countedPackage} unit={currentT.countedUnit} itemId={t.item} isEdit={isMassEditMode} fieldPkg="countedPackage" fieldUnit="countedUnit" isStockDisplay />
+                                        )}
                                     </TableCell>
                                     <TableCell className="text-center font-mono text-xs text-blue-600">
-                                        <CellDisplay pkg={purchSoakPackage} unit={purchSoakUnit} isEdit={isMassEditMode} fieldPkg="purchasedPackage" fieldUnit="purchasedUnit" />
+                                        {currentT.source === "Stock Count" || currentT.source === "Soak Cycle" || currentT.source === "Daily Occupancy" ? (
+                                            <span className="text-muted-foreground">-</span>
+                                        ) : (
+                                            <CellDisplay pkg={currentT.purchasedPackage} unit={currentT.purchasedUnit} itemId={t.item} isEdit={isMassEditMode} fieldPkg="purchasedPackage" fieldUnit="purchasedUnit" isStockDisplay />
+                                        )}
+                                    </TableCell>
+                                    <TableCell className="text-center font-mono text-xs text-cyan-600">
+                                        {currentT.source === "Stock Count" || currentT.source === "Daily Occupancy" || currentT.source === "Stock Purchase" ? (
+                                            <span className="text-muted-foreground">-</span>
+                                        ) : (
+                                            <CellDisplay pkg={currentT.soakPackage} unit={currentT.soakUnit} itemId={t.item} isEdit={isMassEditMode} fieldPkg="soakPackage" fieldUnit="soakUnit" isStockDisplay />
+                                        )}
+                                    </TableCell>
+                                    <TableCell className="text-center font-mono text-xs text-red-600">
+                                        {currentT.source === "Stock Purchase" || (currentT.source === "Stock Count" && !currentT.consumedUnit && !currentT.consumedPackage) ? (
+                                            <span className="text-muted-foreground">-</span>
+                                        ) : (
+                                            <CellDisplay pkg={currentT.consumedPackage} unit={currentT.consumedUnit} itemId={t.item} isEdit={isMassEditMode} fieldPkg="consumedPackage" fieldUnit="consumedUnit" isStockDisplay />
+                                        )}
                                     </TableCell>
                                     <TableCell className="text-center font-mono text-xs font-bold bg-gray-50/50">
-                                        <CellDisplay pkg={closingPackage} unit={closingUnit} />
+                                        <CellDisplay pkg={closingPackage} unit={closingUnit} itemId={t.item} isStockDisplay />
                                     </TableCell>
                                     <TableCell className="text-center font-mono text-xs font-bold text-green-700 bg-green-50/50">
-                                        <CellDisplay pkg={totalBalancePackage} unit={totalBalanceUnit} />
+                                        <CellDisplay pkg={totalBalancePackage} unit={totalBalanceUnit} itemId={t.item} isStockDisplay />
                                     </TableCell>
                                     <TableCell>
                                         {!isMassEditMode && (

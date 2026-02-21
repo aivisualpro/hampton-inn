@@ -21,9 +21,14 @@ export function Header() {
   const [results, setResults] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const pathname = usePathname();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (isSearchOpen && inputRef.current) {
@@ -103,10 +108,10 @@ export function Header() {
 
   /* Search functionality preserved in state but hidden from UI per request */
   
-  if (pathname === "/login") return null;
+  if (!mounted || pathname === "/login") return null;
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-white backdrop-blur supports-[backdrop-filter]:bg-white/95">
+    <header className="flex-none z-50 w-full border-b bg-white">
       <div className="w-full flex h-12 items-center px-4">
         {/* Logo and Name: 50% mobile, 20% desktop */}
         <div className="w-[50%] md:w-[20%] flex items-center">

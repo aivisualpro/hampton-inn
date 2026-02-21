@@ -14,7 +14,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 type Item = {
   _id: string;
@@ -167,10 +166,7 @@ export default function ParLevelReportPage() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 p-0 overflow-auto">
-        <Card className="rounded-none border-0 shadow-none">
-            <CardContent className="p-0">
-                <div className="border-b">
+      <div className="flex-1 overflow-auto">
                     <Table>
                         <TableHeader className="bg-muted/50 sticky top-0 z-10 shadow-sm">
                             <TableRow>
@@ -221,9 +217,6 @@ export default function ParLevelReportPage() {
                             ))}
                         </TableBody>
                     </Table>
-                </div>
-            </CardContent>
-        </Card>
       </div>
     </div>
   );

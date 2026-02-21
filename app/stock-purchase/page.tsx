@@ -184,16 +184,18 @@ function StockPurchaseContent() {
   };
 
   const handlePrevDay = () => {
-    const currentDate = new Date(selectedDate);
-    currentDate.setDate(currentDate.getDate() - 1);
-    const newDateStr = currentDate.toISOString().split('T')[0];
+    // Parse date parts manually to avoid timezone shifts
+    const [year, month, day] = selectedDate.split('-').map(Number);
+    const currentDate = new Date(Date.UTC(year, month - 1, day - 1));
+    const newDateStr = `${currentDate.getUTCFullYear()}-${String(currentDate.getUTCMonth() + 1).padStart(2, '0')}-${String(currentDate.getUTCDate()).padStart(2, '0')}`;
     updateUrl("date", newDateStr);
   };
 
   const handleNextDay = () => {
-    const currentDate = new Date(selectedDate);
-    currentDate.setDate(currentDate.getDate() + 1);
-    const newDateStr = currentDate.toISOString().split('T')[0];
+    // Parse date parts manually to avoid timezone shifts
+    const [year, month, day] = selectedDate.split('-').map(Number);
+    const currentDate = new Date(Date.UTC(year, month - 1, day + 1));
+    const newDateStr = `${currentDate.getUTCFullYear()}-${String(currentDate.getUTCMonth() + 1).padStart(2, '0')}-${String(currentDate.getUTCDate()).padStart(2, '0')}`;
     updateUrl("date", newDateStr);
   };
 
@@ -486,6 +488,15 @@ function StockPurchaseContent() {
     return "";
   };
 
+  // Format values as "pkg / unit (total)" e.g. "11 / 0 (132)"
+  const formatPkgUnit = (pkg: number, unit: number, pkgStr?: string) => {
+    const pkgSize = getPackageSize(pkgStr);
+    const hasPkg = !!pkgStr && pkgStr !== "0" && pkgSize > 1;
+    if (!hasPkg) return `${unit}`;
+    const total = (pkg * pkgSize) + unit;
+    return { pkg, unit, total };
+  };
+
   const handleCancel = () => {
     setIsEditMode(false);
     setEditedValues({});
@@ -768,10 +779,15 @@ function StockPurchaseContent() {
             {/* Mobile/Tablet Card View */}
             <div className="lg:hidden grid grid-cols-1 sm:grid-cols-2 gap-3">
               {displayedItems.map((item) => {
-                const purchasedUnit = getDisplayValue(item._id, "purchasedUnit");
-                const purchasedPackage = getDisplayValue(item._id, "purchasedPackage");
-                const closingUnit = item.openingBalanceUnit + Number(purchasedUnit || 0);
-                const closingPackage = item.openingBalancePackage + Number(purchasedPackage || 0);
+                const purchasedUnit = Number(getDisplayValue(item._id, "purchasedUnit") || 0);
+                const purchasedPackage = Number(getDisplayValue(item._id, "purchasedPackage") || 0);
+                const closingUnit = item.openingBalanceUnit + purchasedUnit;
+                const closingPackage = item.openingBalancePackage + purchasedPackage;
+                const hasPkg = !!item.package && item.package !== "0" && getPackageSize(item.package) > 1;
+                
+                const openingFmt = formatPkgUnit(item.openingBalancePackage, item.openingBalanceUnit, item.package);
+                const purchasedFmt = formatPkgUnit(purchasedPackage, purchasedUnit, item.package);
+                const closingFmt = formatPkgUnit(closingPackage, closingUnit, item.package);
                 
                 return (
                   <div key={item._id} className="bg-white rounded-xl shadow-sm border p-4 space-y-3">
@@ -782,75 +798,72 @@ function StockPurchaseContent() {
                       </Link>
                     </div>
                     
-                    {/* Values Grid - 3 columns for purchase view */}
-                    <div className="grid grid-cols-3 gap-2 text-center">
-                      <div className="text-xs font-medium text-gray-500"></div>
-                      <div className="text-xs font-medium text-gray-500">Units</div>
-                      <div className="text-xs font-medium text-gray-500">Packages</div>
-                    </div>
-                    
-                    {/* Opening */}
-                    <div className="grid grid-cols-3 gap-2 items-center">
-                      <div className="text-xs text-gray-500">Opening</div>
-                      <div className="bg-gray-50 rounded-lg p-2 text-center">
-                        <p className="text-sm font-bold text-gray-700">{item.openingBalanceUnit}</p>
-                      </div>
-                      <div className="bg-gray-50 rounded-lg p-2 text-center">
-                        <p className="text-sm font-bold text-gray-700">{item.openingBalanceUnit}</p>
-                      </div>
-                      {(!!item.package && item.package !== "0") && (
-                      <div className="bg-gray-50 rounded-lg p-2 text-center">
-                        <p className="text-sm font-bold text-gray-700">{item.openingBalancePackage}</p>
-                      </div>
-                      )}
-                    </div>
-                    
-                    {/* Purchased */}
-                    <div className="grid grid-cols-3 gap-2 items-center">
-                      <div className="text-xs text-blue-600">Purchased</div>
-                      <div className="bg-blue-50 rounded-lg p-1">
-                        {isEditMode ? (
-                          <Input
-                            type="number"
-                            min="0"
-                            value={purchasedUnit}
-                            onChange={(e) => handleValueChange(item._id, "purchasedUnit", e.target.value)}
-                            className="h-8 text-sm font-bold text-center border-blue-200 focus-visible:ring-blue-400"
-                            onWheel={(e) => (e.target as HTMLInputElement).blur()}
-                          />
+                    {/* Values Grid */}
+                    <div className="grid grid-cols-3 gap-3">
+                      {/* Opening */}
+                      <div className="bg-gray-50 rounded-lg p-3">
+                        <p className="text-xs text-gray-500 mb-1">Opening</p>
+                        {typeof openingFmt === 'string' ? (
+                          <p className="text-lg font-bold text-gray-700">{openingFmt}</p>
                         ) : (
-                          <p className="text-sm font-bold text-blue-700 text-center py-1">{purchasedUnit === 0 ? "" : purchasedUnit}</p>
+                          <>
+                            <p className="text-lg font-bold text-gray-700">{openingFmt.pkg} / {openingFmt.unit}</p>
+                            <p className="text-xs text-gray-400">({openingFmt.total})</p>
+                          </>
                         )}
                       </div>
-                      {(!!item.package && item.package !== "0") && (
-                      <div className="bg-blue-50 rounded-lg p-1">
+                      
+                      {/* Purchased */}
+                      <div className="bg-blue-50 rounded-lg p-3">
+                        <p className="text-xs text-blue-600 mb-1">Purchased</p>
                         {isEditMode ? (
-                          <Input
-                            type="number"
-                            min="0"
-                            value={purchasedPackage}
-                            onChange={(e) => handleValueChange(item._id, "purchasedPackage", e.target.value)}
-                            className="h-8 text-sm font-bold text-center border-blue-200 focus-visible:ring-blue-400"
-                            onWheel={(e) => (e.target as HTMLInputElement).blur()}
-                          />
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1">
+                              {hasPkg && (
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  placeholder="Pkg"
+                                  value={getDisplayValue(item._id, "purchasedPackage")}
+                                  onChange={(e) => handleValueChange(item._id, "purchasedPackage", parseInt(e.target.value) || 0)}
+                                  className="h-9 text-sm font-bold text-center border-blue-200 focus-visible:ring-blue-400 flex-1"
+                                  onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                                />
+                              )}
+                              {hasPkg && <span className="text-gray-400 text-sm">/</span>}
+                              <Input
+                                type="number"
+                                min="0"
+                                placeholder="Unit"
+                                value={getDisplayValue(item._id, "purchasedUnit")}
+                                onChange={(e) => handleValueChange(item._id, "purchasedUnit", parseInt(e.target.value) || 0)}
+                                className="h-9 text-sm font-bold text-center border-blue-200 focus-visible:ring-blue-400 flex-1"
+                                onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                              />
+                            </div>
+                          </div>
+                        ) : typeof purchasedFmt === 'string' ? (
+                          <p className="text-lg font-bold text-blue-700">{purchasedFmt === '0' ? '' : purchasedFmt}</p>
                         ) : (
-                          <p className="text-sm font-bold text-blue-700 text-center py-1">{purchasedPackage === 0 ? "" : purchasedPackage}</p>
+                          <>
+                            <p className="text-lg font-bold text-blue-700">{purchasedFmt.pkg} / {purchasedFmt.unit}</p>
+                            <p className="text-xs text-blue-400">({purchasedFmt.total})</p>
+                          </>
                         )}
                       </div>
-                      )}
-                    </div>
-                    
-                    {/* Closing */}
-                    <div className="grid grid-cols-3 gap-2 items-center">
-                      <div className="text-xs text-green-600">Closing</div>
-                      <div className="bg-green-50 rounded-lg p-2 text-center">
-                        <p className="text-sm font-bold text-green-700">{closingUnit}</p>
+                      
+                      {/* Closing */}
+                      <div className="bg-green-50 rounded-lg p-3">
+                        <p className="text-xs text-green-600 mb-1">Closing</p>
+                        {typeof closingFmt === 'string' ? (
+                          <p className="text-lg font-bold text-green-700">{closingFmt}</p>
+                        ) : (
+                          <>
+                            <p className="text-lg font-bold text-green-700">{closingFmt.pkg} / {closingFmt.unit}</p>
+                            <p className="text-xs text-green-400">({closingFmt.total})</p>
+                          </>
+                        )}
                       </div>
-                      {(!!item.package && item.package !== "0") && (
-                      <div className="bg-green-50 rounded-lg p-2 text-center">
-                        <p className="text-sm font-bold text-green-700">{closingPackage}</p>
-                      </div>
-                      )}
                     </div>
                   </div>
                 );
@@ -863,20 +876,22 @@ function StockPurchaseContent() {
                 <TableHeader className="bg-muted/50 sticky top-0">
                   <TableRow>
                     <TableHead className="font-semibold pl-4">Item</TableHead>
-                    <TableHead className="font-semibold text-center w-[100px] bg-gray-50/50">Opening (Unit)</TableHead>
-                    <TableHead className="font-semibold text-center w-[100px] bg-gray-50/50">Opening (Pkg)</TableHead>
-                    <TableHead className="font-semibold text-center w-[100px] bg-blue-50/50">Purchased (Unit)</TableHead>
-                    <TableHead className="font-semibold text-center w-[100px] bg-blue-50/50">Purchased (Pkg)</TableHead>
-                    <TableHead className="font-semibold text-center w-[100px] bg-green-50/50">Closing (Unit)</TableHead>
-                    <TableHead className="font-semibold text-center w-[100px] bg-green-50/50">Closing (Pkg)</TableHead>
+                    <TableHead className="font-semibold text-center w-[160px] bg-gray-50/50">Opening</TableHead>
+                    <TableHead className="font-semibold text-center w-[200px] bg-blue-50/50">Purchased</TableHead>
+                    <TableHead className="font-semibold text-center w-[160px] bg-green-50/50">Closing</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {displayedItems.map((item) => {
-                    const purchasedUnit = getDisplayValue(item._id, "purchasedUnit");
-                    const purchasedPackage = getDisplayValue(item._id, "purchasedPackage");
-                    const closingUnit = item.openingBalanceUnit + Number(purchasedUnit || 0);
-                    const closingPackage = item.openingBalancePackage + Number(purchasedPackage || 0);
+                    const pUnit = Number(getDisplayValue(item._id, "purchasedUnit") || 0);
+                    const pPkg = Number(getDisplayValue(item._id, "purchasedPackage") || 0);
+                    const closingUnit = item.openingBalanceUnit + pUnit;
+                    const closingPackage = item.openingBalancePackage + pPkg;
+                    const hasPkg = !!item.package && item.package !== "0" && getPackageSize(item.package) > 1;
+                    
+                    const openingFmt = formatPkgUnit(item.openingBalancePackage, item.openingBalanceUnit, item.package);
+                    const purchasedFmt = formatPkgUnit(pPkg, pUnit, item.package);
+                    const closingFmt = formatPkgUnit(closingPackage, closingUnit, item.package);
                     
                     return (
                       <TableRow key={item._id}>
@@ -886,46 +901,58 @@ function StockPurchaseContent() {
                           </Link>
                         </TableCell>
                         <TableCell className="text-center font-medium text-gray-600 bg-gray-50/30">
-                          {item.openingBalanceUnit}
-                        </TableCell>
-                        <TableCell className="text-center font-medium text-gray-600 bg-gray-50/30">
-                          {(!!item.package && item.package !== "0") ? item.openingBalancePackage : "-"}
+                          {typeof openingFmt === 'string' ? (
+                            openingFmt
+                          ) : (
+                            <div>
+                              <span>{openingFmt.pkg} / {openingFmt.unit}</span>
+                              <span className="text-xs text-gray-400 ml-1">({openingFmt.total})</span>
+                            </div>
+                          )}
                         </TableCell>
                         <TableCell className="text-center bg-blue-50/20">
                           {isEditMode ? (
-                            <Input
-                              type="number"
-                              min="0"
-                              value={purchasedUnit}
-                              onChange={(e) => handleValueChange(item._id, "purchasedUnit", e.target.value)}
-                              className="w-16 mx-auto text-center h-8 border-blue-200 focus-visible:ring-blue-400"
-                              onWheel={(e) => (e.target as HTMLInputElement).blur()}
-                            />
+                            <div className="flex items-center gap-1 justify-center">
+                              {hasPkg && (
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  placeholder="Pkg"
+                                  value={getDisplayValue(item._id, "purchasedPackage")}
+                                  onChange={(e) => handleValueChange(item._id, "purchasedPackage", e.target.value)}
+                                  className="w-16 mx-auto text-center h-8 border-blue-200 focus-visible:ring-blue-400"
+                                  onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                                />
+                              )}
+                              {hasPkg && <span className="text-gray-400">/</span>}
+                              <Input
+                                type="number"
+                                min="0"
+                                placeholder="Unit"
+                                value={getDisplayValue(item._id, "purchasedUnit")}
+                                onChange={(e) => handleValueChange(item._id, "purchasedUnit", e.target.value)}
+                                className="w-16 mx-auto text-center h-8 border-blue-200 focus-visible:ring-blue-400"
+                                onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                              />
+                            </div>
+                          ) : typeof purchasedFmt === 'string' ? (
+                            <span>{purchasedFmt === '0' ? '' : purchasedFmt}</span>
                           ) : (
-                            <span>{purchasedUnit === 0 ? "" : purchasedUnit}</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-center bg-blue-50/20">
-                          {!(!!item.package && item.package !== "0") ? (
-                              <span className="text-muted-foreground">-</span>
-                          ) : isEditMode ? (
-                            <Input
-                              type="number"
-                              min="0"
-                              value={purchasedPackage}
-                              onChange={(e) => handleValueChange(item._id, "purchasedPackage", e.target.value)}
-                              className="w-16 mx-auto text-center h-8 border-blue-200 focus-visible:ring-blue-400"
-                              onWheel={(e) => (e.target as HTMLInputElement).blur()}
-                            />
-                          ) : (
-                            <span>{purchasedPackage === 0 ? "" : purchasedPackage}</span>
+                            <div>
+                              <span>{purchasedFmt.pkg} / {purchasedFmt.unit}</span>
+                              <span className="text-xs text-blue-400 ml-1">({purchasedFmt.total})</span>
+                            </div>
                           )}
                         </TableCell>
                         <TableCell className="text-center font-bold text-green-700 bg-green-50/20">
-                          {closingUnit}
-                        </TableCell>
-                        <TableCell className="text-center font-bold text-green-700 bg-green-50/20">
-                          {(!!item.package && item.package !== "0") ? closingPackage : "-"}
+                          {typeof closingFmt === 'string' ? (
+                            closingFmt
+                          ) : (
+                            <div>
+                              <span>{closingFmt.pkg} / {closingFmt.unit}</span>
+                              <span className="text-xs text-green-400 ml-1">({closingFmt.total})</span>
+                            </div>
+                          )}
                         </TableCell>
                       </TableRow>
                     );

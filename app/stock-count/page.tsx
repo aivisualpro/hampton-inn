@@ -703,6 +703,15 @@ function StockCountContent() {
     return "";
   };
 
+  // Format values as "pkg / unit (total)" e.g. "11 / 0 (132)"
+  const formatPkgUnit = (pkg: number, unit: number, pkgStr?: string) => {
+    const pkgSize = getPackageSize(pkgStr);
+    const hasPkg = !!pkgStr && pkgStr !== "0" && pkgSize > 1;
+    if (!hasPkg) return `${unit}`;
+    const total = (pkg * pkgSize) + unit;
+    return { pkg, unit, total };
+  };
+
   return (
     <div className="w-full h-full flex flex-col">
       {/* Top Controls */}
@@ -909,64 +918,83 @@ function StockCountContent() {
                   </div>
                   
                   {/* Values Grid */}
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className={`grid ${(!!item.package && item.package !== "0" && getPackageSize(item.package) > 1) ? 'grid-cols-3' : 'grid-cols-3'} gap-3`}>
                     {/* Opening Balance */}
                     <div className="bg-gray-50 rounded-lg p-3">
-                      <p className="text-xs text-gray-500 mb-1">Opening (Unit)</p>
-                      <p className="text-lg font-bold text-gray-700">{item.openingBalanceUnit}</p>
+                      <p className="text-xs text-gray-500 mb-1">Opening</p>
+                      {(() => {
+                        const fmt = formatPkgUnit(item.openingBalancePackage, item.openingBalanceUnit, item.package);
+                        if (typeof fmt === 'string') return <p className="text-lg font-bold text-gray-700">{fmt}</p>;
+                        return (
+                          <>
+                            <p className="text-lg font-bold text-gray-700">{fmt.pkg} / {fmt.unit}</p>
+                            <p className="text-xs text-gray-400">({fmt.total})</p>
+                          </>
+                        );
+                      })()}
                     </div>
-                    {(!!item.package && item.package !== "0") && (
-                    <div className="bg-gray-50 rounded-lg p-3">
-                      <p className="text-xs text-gray-500 mb-1">Opening (Pkg)</p>
-                      <p className="text-lg font-bold text-gray-700">{item.openingBalancePackage}</p>
-                    </div>
-                    )}
                     
                     {/* Count - Editable in Edit Mode */}
                     <div className="bg-blue-50 rounded-lg p-3">
-                      <p className="text-xs text-blue-600 mb-1">Count (Unit)</p>
+                      <p className="text-xs text-blue-600 mb-1">Count</p>
                       {isEditMode ? (
-                        <Input
-                          type="number"
-                          min="0"
-                          value={getDisplayValue(item._id, "countedUnit")}
-                          onChange={(e) => handleValueChange(item._id, "countedUnit", parseInt(e.target.value) || 0)}
-                          className="h-10 text-lg font-bold text-center border-blue-200 focus-visible:ring-blue-400"
-                          onWheel={(e) => (e.target as HTMLInputElement).blur()}
-                        />
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1">
+                            {(!!item.package && item.package !== "0" && getPackageSize(item.package) > 1) && (
+                              <Input
+                                type="number"
+                                min="0"
+                                placeholder="Pkg"
+                                value={getDisplayValue(item._id, "countedPackage")}
+                                onChange={(e) => handleValueChange(item._id, "countedPackage", parseInt(e.target.value) || 0)}
+                                className="h-9 text-sm font-bold text-center border-blue-200 focus-visible:ring-blue-400 flex-1"
+                                onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                              />
+                            )}
+                            {(!!item.package && item.package !== "0" && getPackageSize(item.package) > 1) && (
+                              <span className="text-gray-400 text-sm">/</span>
+                            )}
+                            <Input
+                              type="number"
+                              min="0"
+                              placeholder="Unit"
+                              value={getDisplayValue(item._id, "countedUnit")}
+                              onChange={(e) => handleValueChange(item._id, "countedUnit", parseInt(e.target.value) || 0)}
+                              className="h-9 text-sm font-bold text-center border-blue-200 focus-visible:ring-blue-400 flex-1"
+                              onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                            />
+                          </div>
+                        </div>
                       ) : (
-                        <p className="text-lg font-bold text-blue-700">{item.countedUnit}</p>
+                        (() => {
+                          const fmt = formatPkgUnit(item.countedPackage, item.countedUnit, item.package);
+                          if (typeof fmt === 'string') return <p className="text-lg font-bold text-blue-700">{fmt}</p>;
+                          return (
+                            <>
+                              <p className="text-lg font-bold text-blue-700">{fmt.pkg} / {fmt.unit}</p>
+                              <p className="text-xs text-blue-400">({fmt.total})</p>
+                            </>
+                          );
+                        })()
                       )}
                     </div>
-                    {(!!item.package && item.package !== "0") && (
-                    <div className="bg-blue-50 rounded-lg p-3">
-                      <p className="text-xs text-blue-600 mb-1">Count (Pkg)</p>
-                      {isEditMode ? (
-                        <Input
-                          type="number"
-                          min="0"
-                          value={getDisplayValue(item._id, "countedPackage")}
-                          onChange={(e) => handleValueChange(item._id, "countedPackage", parseInt(e.target.value) || 0)}
-                          className="h-10 text-lg font-bold text-center border-blue-200 focus-visible:ring-blue-400"
-                          onWheel={(e) => (e.target as HTMLInputElement).blur()}
-                        />
-                      ) : (
-                        <p className="text-lg font-bold text-blue-700">{item.countedPackage}</p>
-                      )}
-                    </div>
-                    )}
                     
                     {/* Closing Balance */}
                     <div className="bg-green-50 rounded-lg p-3">
-                      <p className="text-xs text-green-600 mb-1">Closing (Unit)</p>
-                      <p className="text-lg font-bold text-green-700">{getDisplayValue(item._id, "countedUnit")}</p>
+                      <p className="text-xs text-green-600 mb-1">Closing</p>
+                      {(() => {
+                        const cUnit = Number(getDisplayValue(item._id, "countedUnit") || 0);
+                        const cPkg = Number(getDisplayValue(item._id, "countedPackage") || 0);
+                        const fmt = formatPkgUnit(cPkg, cUnit, item.package);
+                        if (typeof fmt === 'string') return <p className="text-lg font-bold text-green-700">{fmt}</p>;
+                        return (
+                          <>
+                            <p className="text-lg font-bold text-green-700">{fmt.pkg} / {fmt.unit}</p>
+                            <p className="text-xs text-green-400">({fmt.total})</p>
+                          </>
+                        );
+                      })()}
                     </div>
-                    {(!!item.package && item.package !== "0") && (
-                    <div className="bg-green-50 rounded-lg p-3">
-                      <p className="text-xs text-green-600 mb-1">Closing (Pkg)</p>
-                      <p className="text-lg font-bold text-green-700">{getDisplayValue(item._id, "countedPackage")}</p>
-                    </div>
-                    )}
                   </div>
                 </div>
               ))}
@@ -978,16 +1006,21 @@ function StockCountContent() {
                 <TableHeader className="bg-muted/50 sticky top-0">
                   <TableRow>
                     <TableHead className="font-semibold pl-4">Item</TableHead>
-                    <TableHead className="font-semibold text-center w-[130px] bg-gray-50/50">Opening (Unit)</TableHead>
-                    <TableHead className="font-semibold text-center w-[130px] bg-gray-50/50">Opening (Pkg)</TableHead>
-                    <TableHead className="font-semibold text-center w-[130px] bg-blue-50/50">Count Unit</TableHead>
-                    <TableHead className="font-semibold text-center w-[130px] bg-blue-50/50">Count Pkg</TableHead>
-                    <TableHead className="font-semibold text-center w-[130px] bg-green-50/50">Closing (Unit)</TableHead>
-                    <TableHead className="font-semibold text-center w-[130px] bg-green-50/50">Closing (Pkg)</TableHead>
+                    <TableHead className="font-semibold text-center w-[160px] bg-gray-50/50">Opening</TableHead>
+                    <TableHead className="font-semibold text-center w-[200px] bg-blue-50/50">Count</TableHead>
+                    <TableHead className="font-semibold text-center w-[160px] bg-green-50/50">Closing</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {displayedItems.map((item) => (
+                  {displayedItems.map((item) => {
+                    const hasPkg = !!item.package && item.package !== "0" && getPackageSize(item.package) > 1;
+                    const openingFmt = formatPkgUnit(item.openingBalancePackage, item.openingBalanceUnit, item.package);
+                    const cUnit = Number(getDisplayValue(item._id, "countedUnit") || 0);
+                    const cPkg = Number(getDisplayValue(item._id, "countedPackage") || 0);
+                    const closingFmt = formatPkgUnit(cPkg, cUnit, item.package);
+                    const countFmt = formatPkgUnit(item.countedPackage, item.countedUnit, item.package);
+                    
+                    return (
                     <TableRow key={item._id}>
                       <TableCell className="font-medium pl-4">
                         <Link href={`/admin/items/${item._id}`} className="hover:underline hover:text-primary">
@@ -995,49 +1028,62 @@ function StockCountContent() {
                         </Link>
                       </TableCell>
                       <TableCell className="text-center font-medium text-gray-600 bg-gray-50/30">
-                        {item.openingBalanceUnit}
-                      </TableCell>
-                      <TableCell className="text-center font-medium text-gray-600 bg-gray-50/30">
-                        {(!!item.package && item.package !== "0") ? item.openingBalancePackage : "-"}
+                        {typeof openingFmt === 'string' ? (
+                          openingFmt
+                        ) : (
+                          <div>
+                            <span>{openingFmt.pkg} / {openingFmt.unit}</span>
+                            <span className="text-xs text-gray-400 ml-1">({openingFmt.total})</span>
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell className="text-center bg-blue-50/20">
                         {isEditMode ? (
-                          <Input
-                            type="number"
-                            min="0"
-                            value={getDisplayValue(item._id, "countedUnit")}
-                            onChange={(e) => handleValueChange(item._id, "countedUnit", e.target.value)}
-                            className="w-20 mx-auto text-center h-8 border-blue-200 focus-visible:ring-blue-400"
-                            onWheel={(e) => (e.target as HTMLInputElement).blur()}
-                          />
+                          <div className="flex items-center gap-1 justify-center">
+                            {hasPkg && (
+                              <Input
+                                type="number"
+                                min="0"
+                                placeholder="Pkg"
+                                value={getDisplayValue(item._id, "countedPackage")}
+                                onChange={(e) => handleValueChange(item._id, "countedPackage", e.target.value)}
+                                className="w-16 mx-auto text-center h-8 border-blue-200 focus-visible:ring-blue-400"
+                                onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                              />
+                            )}
+                            {hasPkg && <span className="text-gray-400">/</span>}
+                            <Input
+                              type="number"
+                              min="0"
+                              placeholder="Unit"
+                              value={getDisplayValue(item._id, "countedUnit")}
+                              onChange={(e) => handleValueChange(item._id, "countedUnit", e.target.value)}
+                              className="w-16 mx-auto text-center h-8 border-blue-200 focus-visible:ring-blue-400"
+                              onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                            />
+                          </div>
+                        ) : typeof countFmt === 'string' ? (
+                          <span>{countFmt === '0' ? '' : countFmt}</span>
                         ) : (
-                          <span>{item.countedUnit === 0 ? "" : item.countedUnit}</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-center bg-blue-50/20">
-                        {!(!!item.package && item.package !== "0") ? (
-                            <span className="text-muted-foreground">-</span>
-                        ) : isEditMode ? (
-                          <Input
-                            type="number"
-                            min="0"
-                            value={getDisplayValue(item._id, "countedPackage")}
-                            onChange={(e) => handleValueChange(item._id, "countedPackage", e.target.value)}
-                            className="w-20 mx-auto text-center h-8 border-blue-200 focus-visible:ring-blue-400"
-                            onWheel={(e) => (e.target as HTMLInputElement).blur()}
-                          />
-                        ) : (
-                          <span>{item.countedPackage === 0 ? "" : item.countedPackage}</span>
+                          <div>
+                            <span>{countFmt.pkg} / {countFmt.unit}</span>
+                            <span className="text-xs text-blue-400 ml-1">({countFmt.total})</span>
+                          </div>
                         )}
                       </TableCell>
                       <TableCell className="text-center font-medium text-gray-700 bg-green-50/20">
-                        {getDisplayValue(item._id, "countedUnit") || ""}
-                      </TableCell>
-                      <TableCell className="text-center font-medium text-gray-700 bg-green-50/20">
-                        {(!!item.package && item.package !== "0") ? (getDisplayValue(item._id, "countedPackage") || "") : "-"}
+                        {typeof closingFmt === 'string' ? (
+                          closingFmt === '0' ? '' : closingFmt
+                        ) : (
+                          <div>
+                            <span>{closingFmt.pkg} / {closingFmt.unit}</span>
+                            <span className="text-xs text-green-400 ml-1">({closingFmt.total})</span>
+                          </div>
+                        )}
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>

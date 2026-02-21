@@ -37,46 +37,75 @@ export async function GET() {
         const itemMap = new Map();
         items.forEach(i => itemMap.set(i._id.toString(), i));
 
-        // 4. Fetch Latest Stock Counts
-        // Group by Item + Location, get the latest transaction's countedUnit
-        const stockData = await Transaction.aggregate([
-            { $match: { item: { $in: itemIds } } },
-            { $group: {
-                _id: { item: "$item", location: "$location" },
-                unitDelta: { 
-                    $sum: { 
-                        $subtract: [ 
-                            { $add: [ { $ifNull: ["$purchasedUnit", 0] }, { $ifNull: ["$soakUnit", 0] } ] }, 
-                            { $ifNull: ["$consumedUnit", 0] } 
-                        ] 
-                    } 
-                },
-                packageDelta: { 
-                    $sum: { 
-                        $subtract: [ 
-                            { $add: [ { $ifNull: ["$purchasedPackage", 0] }, { $ifNull: ["$soakPackage", 0] } ] }, 
-                            { $ifNull: ["$consumedPackage", 0] } 
-                        ] 
-                    } 
-                }
-            }}
-        ]);
-        
-        // Transform stockData into a map for easy lookup: { itemId: { locationId: count } }
+        // 4. Calculate closing stock per item per location
+        // Same logic as /api/stock/current: find latest Stock Count, use it as base,
+        // then add deltas from transactions after that count.
+        const transactions = await Transaction.find({ item: { $in: itemIds } })
+            .sort({ date: -1, createdAt: -1 })
+            .lean();
+
+        // Group by Item -> Location
+        const groups: Record<string, Record<string, any[]>> = {};
+        for (const tx of transactions) {
+            const iId = (tx as any).item?.toString();
+            const lId = (tx as any).location?.toString();
+            if (!iId || !lId) continue;
+            if (!groups[iId]) groups[iId] = {};
+            if (!groups[iId][lId]) groups[iId][lId] = [];
+            groups[iId][lId].push(tx);
+        }
+
+        // Calculate closing stock per item per location
         const stockMap: Record<string, Record<string, number>> = {};
-        stockData.forEach((record: any) => {
-            const itemId = record._id.item;
-            const locationId = record._id.location;
-            
+        for (const [itemId, locs] of Object.entries(groups)) {
             const item = itemMap.get(itemId);
             const pkgSize = item ? getPackageSize(item.package) : 1;
-            
-            // Calculate Total Count (Units + Packages * Size)
-            const totalCount = record.unitDelta + (record.packageDelta * pkgSize);
 
             if (!stockMap[itemId]) stockMap[itemId] = {};
-            stockMap[itemId][locationId] = totalCount;
-        });
+
+            for (const [locId, txns] of Object.entries(locs)) {
+                let baseBalance = 0;
+                let latestCountDate: number | null = null;
+
+                // Find the latest Stock Count date
+                for (const tx of txns) {
+                    if ((tx as any).source === "Stock Count" && (tx as any).date) {
+                        latestCountDate = new Date((tx as any).date).getTime();
+                        break; // txns are sorted desc, so first match is latest
+                    }
+                }
+
+                let purchasedDelta = 0;
+                let consumedDelta = 0;
+                let soakDelta = 0;
+
+                for (const tx of txns) {
+                    if (!(tx as any).date) continue;
+                    const txDate = new Date((tx as any).date).getTime();
+
+                    if (latestCountDate !== null) {
+                        if (txDate === latestCountDate) {
+                            if ((tx as any).source === "Stock Count") {
+                                const countedPkg = (tx as any).countedPackage || 0;
+                                const countedUnit = (tx as any).countedUnit || 0;
+                                baseBalance += (countedPkg * pkgSize) + countedUnit;
+                            }
+                            continue;
+                        } else if (txDate < latestCountDate) {
+                            continue;
+                        }
+                    }
+
+                    // Transactions newer than latest count (or no count exists)
+                    purchasedDelta += ((tx as any).purchasedPackage || 0) * pkgSize + ((tx as any).purchasedUnit || 0);
+                    consumedDelta += ((tx as any).consumedPackage || 0) * pkgSize + ((tx as any).consumedUnit || 0);
+                    soakDelta += ((tx as any).soakUnit || 0);
+                }
+
+                const currentUnits = baseBalance + purchasedDelta - consumedDelta - soakDelta;
+                stockMap[itemId][locId] = currentUnits;
+            }
+        }
         
         return NextResponse.json({
             settings: settings || { defaultKingRoomCount: 0, defaultDoubleQueenRoomCount: 0 },

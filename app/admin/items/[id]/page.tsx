@@ -54,8 +54,8 @@ export default function ItemDetailsPage() {
       setLoading(true);
       try {
         const [itemRes, stockRes] = await Promise.all([
-          fetch(`/api/items/${id}`),
-          fetch(`/api/stock/item/${id}`),
+          fetch(`/api/items/${id}`, { cache: 'no-store' }),
+          fetch(`/api/stock/item/${id}`, { cache: 'no-store' }),
         ]);
 
         if (itemRes.ok) {

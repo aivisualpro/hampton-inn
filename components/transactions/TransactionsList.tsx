@@ -227,16 +227,20 @@ export function TransactionsList({ itemId, headerContent }: TransactionsListProp
     }
   };
 
-  const fetchData = async () => {
+  const fetchData = async (signal?: AbortSignal) => {
     try {
       setLoading(true);
+      const fetchOpts: RequestInit = { cache: 'no-store', signal };
       const url = itemId ? `/api/transactions?item=${itemId}` : "/api/transactions";
       const [transRes, itemsRes, locRes, stockRes] = await Promise.all([
-        fetch(url),
-        fetch("/api/items"),
-        fetch("/api/locations"),
-        fetch("/api/stock/current"),
+        fetch(url, fetchOpts),
+        fetch("/api/items", fetchOpts),
+        fetch("/api/locations", fetchOpts),
+        fetch("/api/stock/current", fetchOpts),
       ]);
+
+      // If aborted, don't update state
+      if (signal?.aborted) return;
 
       if (!transRes.ok) throw new Error("Failed to fetch transactions");
       const transData = await transRes.json();
@@ -264,15 +268,20 @@ export function TransactionsList({ itemId, headerContent }: TransactionsListProp
           });
           setTotalStockMap(stockMap);
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (error?.name === 'AbortError') return; // Silently ignore aborts
       console.error("Error fetching data:", error);
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) {
+        setLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    fetchData();
+    const controller = new AbortController();
+    fetchData(controller.signal);
+    return () => controller.abort();
   }, [itemId]);
 
   const handleEditClick = (t: Transaction) => {

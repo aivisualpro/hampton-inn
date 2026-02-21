@@ -477,10 +477,16 @@ function StockCountContent() {
   const handleSave = async () => {
     if (!selectedLocation || !selectedDate) return;
 
+    // CRITICAL: Snapshot editedValues and transactions BEFORE any state clearing.
+    // React state updates are asynchronous, and the closure can lose reference
+    // to the original data if we clear state before the async save loop runs.
+    const valuesToSave = { ...editedValues };
+    const currentTransactions = [...transactions];
+
     // VALIDATION STEP
     const errors: string[] = [];
     
-    Object.entries(editedValues).forEach(([itemId, values]) => {
+    Object.entries(valuesToSave).forEach(([itemId, values]) => {
         const itemOpening = openingBalancesMap[itemId];
         const openingUnit = itemOpening?.openingBalance || 0;
         const openingPackage = itemOpening?.openingBalancePackage || 0;
@@ -509,11 +515,11 @@ function StockCountContent() {
     }
 
     // 1. Optimistic Update
-    const previousTransactions = [...transactions];
-    const updatedTransactions = [...transactions];
+    const previousTransactions = [...currentTransactions];
+    const updatedTransactions = [...currentTransactions];
     
     // We update local state to reflect changes immediately
-    Object.entries(editedValues).forEach(([itemId, values]) => {
+    Object.entries(valuesToSave).forEach(([itemId, values]) => {
          const valCountedUnit = values.countedUnit === "" ? 0 : Number(values.countedUnit);
          const valCountedPackage = values.countedPackage === "" ? 0 : Number(values.countedPackage);
 
@@ -548,7 +554,7 @@ function StockCountContent() {
     
     setSaving(true);
     try {
-      const savePromises = Object.entries(editedValues)
+      const savePromises = Object.entries(valuesToSave)
         .map(([itemId, values]) => {
            const itemOpening = openingBalancesMap[itemId];
            const openingUnit = itemOpening?.openingBalance || 0;
@@ -565,7 +571,8 @@ function StockCountContent() {
            const pkgSize = getPackageSize(itemDef?.package);
            const totalOpening = (openingPackage * pkgSize) + openingUnit;
            
-           const txnInfo = transactions.find(t => t.item === itemId);
+           // Use the snapshot of transactions, not the (potentially re-rendered) state
+           const txnInfo = currentTransactions.find(t => t.item === itemId);
            const todayPurchasedUnit = txnInfo?.purchasedUnit || 0;
            const todayPurchasedPackage = txnInfo?.purchasedPackage || 0;
            const totalPurchasedToday = (todayPurchasedPackage * pkgSize) + todayPurchasedUnit;
@@ -575,7 +582,7 @@ function StockCountContent() {
            const totalConsumedToday = (todayConsumedPackage * pkgSize) + todayConsumedUnit;
            
            const todaySoakUnit = txnInfo?.soakUnit || 0;
-           const todaySoakPackage = txnInfo?.soakPackage || 0; // Assuming soak supports packages? combined API supports it.
+           const todaySoakPackage = txnInfo?.soakPackage || 0;
            const totalSoakToday = (todaySoakPackage * pkgSize) + todaySoakUnit;
 
            const totalAvailable = totalOpening + totalPurchasedToday - totalConsumedToday - totalSoakToday;
@@ -590,11 +597,6 @@ function StockCountContent() {
 
            if (diff > 0) {
                // Counted > Available -> Found extra items (Treat as Purchase Adjustment)
-               // We add this adjustment to any existing purchase
-               // But usually Stock Count adjustment is separate. 
-               // Based on API fix, we might want to store this as the ONLY purchase value for this source?
-               // Yes, source="Stock Count". So this purchasedUnit is the adjustment.
-               
                const diffPkg = Math.floor(diff / pkgSize);
                const diffUnit = diff % pkgSize;
                
@@ -629,13 +631,12 @@ function StockCountContent() {
             purchasedPackage: purchasedPackage,
             source: "Stock Count",
           }),
+        }).then(res => {
+          if (!res.ok) throw new Error(`Failed to save transaction for item ${itemId}: ${res.status}`);
+          return res;
         });
       })
       .filter(p => p !== null) as Promise<Response>[];
-
-      await Promise.all(savePromises);
-      // ... same as before
-
 
       await Promise.all(savePromises);
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/db";
 import Transaction from "@/models/Transaction";
-import mongoose from "mongoose";
+import Item from "@/models/Item";
 
 // GET - Fetch transactions (with optional filters)
 export async function GET(request: NextRequest) {
@@ -46,10 +46,6 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     await dbConnect();
-    
-    // Import Item model dynamically or ensure it is registered
-    // We need it to check for bundle status
-    const ItemModel = mongoose.models.Item || mongoose.model("Item");
 
     const body = await request.json();
     const { date, item, location, countedUnit, countedPackage } = body;
@@ -61,7 +57,6 @@ export async function POST(request: NextRequest) {
       );
     }
     
-    // Create UTC date for the specific day
     // Create UTC date for the specific day (Start of Day for query)
     const [year, month, day] = date.split('-').map(Number);
     const startOfDay = new Date(Date.UTC(year, month - 1, day));
@@ -115,7 +110,7 @@ export async function POST(request: NextRequest) {
     );
 
     // --- Bundle Logic ---
-    const itemDoc = await ItemModel.findById(item);
+    const itemDoc = await Item.findById(item);
     if (itemDoc && itemDoc.isBundle && itemDoc.bundleItems && itemDoc.bundleItems.length > 0) {
       // Logic: Iterate through bundle items and create/update separate transactions for them
       // These transactions will have 'relatedParentItem' set to the bundle item's ID
@@ -137,9 +132,6 @@ export async function POST(request: NextRequest) {
         if (transaction.purchasedUnit !== undefined) childUpdateData.purchasedUnit = transaction.purchasedUnit * qtyMultiplier;
         if (transaction.soakUnit !== undefined) childUpdateData.soakUnit = transaction.soakUnit * qtyMultiplier;
         if (transaction.consumedUnit !== undefined) childUpdateData.consumedUnit = transaction.consumedUnit * qtyMultiplier;
-        
-        // We do NOT map package counts usually, assuming bundle logic applies to Units mostly. 
-        // If needed, we can add package logic but usually bundles are defined in Units.
 
         await Transaction.findOneAndUpdate(
           {

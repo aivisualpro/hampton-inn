@@ -189,17 +189,19 @@ function StockCountContent() {
   };
 
   const handlePrevDay = () => {
-    const currentDate = new Date(selectedDate);
-    currentDate.setDate(currentDate.getDate() - 1);
-    const newDateStr = currentDate.toISOString().split('T')[0];
+    // Parse date parts manually to avoid timezone shifts
+    const [year, month, day] = selectedDate.split('-').map(Number);
+    const currentDate = new Date(Date.UTC(year, month - 1, day - 1));
+    const newDateStr = `${currentDate.getUTCFullYear()}-${String(currentDate.getUTCMonth() + 1).padStart(2, '0')}-${String(currentDate.getUTCDate()).padStart(2, '0')}`;
     updateUrl("date", newDateStr);
     saveDatePreference(newDateStr);
   };
 
   const handleNextDay = () => {
-    const currentDate = new Date(selectedDate);
-    currentDate.setDate(currentDate.getDate() + 1);
-    const newDateStr = currentDate.toISOString().split('T')[0];
+    // Parse date parts manually to avoid timezone shifts
+    const [year, month, day] = selectedDate.split('-').map(Number);
+    const currentDate = new Date(Date.UTC(year, month - 1, day + 1));
+    const newDateStr = `${currentDate.getUTCFullYear()}-${String(currentDate.getUTCMonth() + 1).padStart(2, '0')}-${String(currentDate.getUTCDate()).padStart(2, '0')}`;
     updateUrl("date", newDateStr);
     saveDatePreference(newDateStr);
   };

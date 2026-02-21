@@ -7,8 +7,8 @@ import { Toaster } from "@/components/ui/toaster";
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
-  title: "Hampton Inn",
-  description: "Next.js Application for Hampton Inn",
+  title: "Hampton by Hilton",
+  description: "Hampton by Hilton - Manassas",
 };
 
 export default function RootLayout({

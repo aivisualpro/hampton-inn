@@ -36,7 +36,7 @@ export function PageTitle() {
     lastSegment === "stock-purchase" ||
     lastSegment === "stock-count" ||
     lastSegment === "soak-cycle" ||
-    lastSegment === "daily-occupancy"
+    lastSegment === "breakfast-consumption"
   ) {
       return null;
   }

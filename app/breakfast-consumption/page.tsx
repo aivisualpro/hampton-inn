@@ -470,7 +470,7 @@ function DailyOccupancyContent() {
             <div className="flex items-center gap-2 text-sm text-muted-foreground whitespace-nowrap">
                 <Link href="/" className="hover:text-primary hover:underline">Home</Link>
                 <ChevronRight className="h-4 w-4" />
-                <span className="font-medium text-foreground">Daily Occupancy</span>
+                <span className="font-medium text-foreground">Breakfast Consumption</span>
             </div>
             
             <div className="flex-1" />
@@ -491,20 +491,17 @@ function DailyOccupancyContent() {
 
                 {/* Occupancy Count */}
                 <div className="flex items-center gap-2 px-3 py-1 bg-purple-50 rounded-lg border border-purple-200 h-9">
-                    <span className="text-sm text-purple-600 font-medium">Occupancy:</span>
+                    <span className="text-sm text-purple-600 font-medium">Occupancy</span>
                     {isOccupancyEditing ? (
                     <div className="flex items-center gap-2">
-                        <div className="relative">
-                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">%</span>
-                            <Input 
-                                type="number" 
-                                value={tempOccupancyPercentage} 
-                                onChange={(e) => setTempOccupancyPercentage(Number(e.target.value) || 0)}
-                                className="w-16 h-7 text-center text-sm pl-4 p-0"
-                                onWheel={(e) => (e.target as HTMLInputElement).blur()}
-                                placeholder="%"
-                            />
-                        </div>
+                        <Input 
+                            type="number" 
+                            value={tempOccupancyPercentage} 
+                            onChange={(e) => setTempOccupancyPercentage(Number(e.target.value) || 0)}
+                            className="w-16 h-7 text-center text-sm p-0"
+                            onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                            placeholder="%"
+                        />
                         <div className="relative">
                             <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-gray-500">#</span>
                             <Input 
@@ -595,20 +592,17 @@ function DailyOccupancyContent() {
             
             {/* Occupancy Count Mobile */}
             <div className="flex items-center justify-between gap-2 px-3 py-2 bg-purple-50 rounded-lg border border-purple-200">
-               <span className="text-sm font-medium text-purple-700">Occupancy:</span>
+               <span className="text-sm font-medium text-purple-700">Occupancy</span>
               {isOccupancyEditing ? (
                 <div className="flex items-center gap-2">
-                   <div className="flex items-center gap-1">
-                      <span className="text-xs text-purple-600">%</span>
-                      <Input 
-                        type="number" 
-                        value={tempOccupancyPercentage} 
-                        onChange={(e) => setTempOccupancyPercentage(Number(e.target.value) || 0)}
-                        className="w-14 h-8 text-center text-sm"
-                        onWheel={(e) => (e.target as HTMLInputElement).blur()}
-                        placeholder="%"
-                      />
-                   </div>
+                   <Input 
+                     type="number" 
+                     value={tempOccupancyPercentage} 
+                     onChange={(e) => setTempOccupancyPercentage(Number(e.target.value) || 0)}
+                     className="w-14 h-8 text-center text-sm"
+                     onWheel={(e) => (e.target as HTMLInputElement).blur()}
+                     placeholder="%"
+                   />
                    <div className="flex items-center gap-1">
                       <span className="text-xs text-purple-600">#</span>
                       <Input 

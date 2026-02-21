@@ -56,13 +56,13 @@ export default function Home() {
       href: "/soak-cycle",
     },
     {
-      title: "Daily Occupancy",
-      description: "Track daily room occupancy",
+      title: "Breakfast Consumption",
+      description: "Track daily breakfast consumption",
       icon: Hotel,
       color: "text-purple-600",
       image: "/bg_daily_occupancy.png",
       value: "View",
-      href: "/daily-occupancy",
+      href: "/breakfast-consumption",
     },
     {
       title: "Stock Count",

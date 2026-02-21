@@ -46,6 +46,19 @@ import {
 
 import { format } from "date-fns";
 
+// UTC-safe date formatting helpers to avoid timezone-shift display bugs.
+// new Date("2026-02-20T00:00:00Z") in UTC-5 => local Feb 19 7pm => format shows "Feb 19".
+// These helpers always use UTC getters so "Feb 20" stays "Feb 20" everywhere.
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const formatDateUTC = (dateStr: string): string => {
+  const d = new Date(dateStr);
+  return `${MONTH_NAMES[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
+};
+const toDateInputUTC = (dateStr: string): string => {
+  const d = new Date(dateStr);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+};
+
 type Transaction = {
   _id: string;
   date: string;
@@ -763,12 +776,12 @@ export function TransactionsList({ itemId, headerContent }: TransactionsListProp
                                      <Input 
                                         type="date" 
                                         className="h-6 w-32 text-xs"
-                                        value={currentT.date ? format(new Date(currentT.date), "yyyy-MM-dd") : ""}
+                                        value={currentT.date ? toDateInputUTC(currentT.date) : ""}
                                         onChange={(e) => handleMassEditChange(t._id, "date", e.target.value)}
                                      /> 
                                  ) : (
                                     <>
-                                        {format(new Date(t.date), "MMM d, yyyy")} • {locations[t.location] || t.location}
+                                        {formatDateUTC(t.date)} • {locations[t.location] || t.location}
                                     </>
                                  )}
                              </div>
@@ -980,10 +993,10 @@ export function TransactionsList({ itemId, headerContent }: TransactionsListProp
                                             <Input 
                                                 type="date" 
                                                 className="h-7 w-32 text-xs"
-                                                value={currentT.date ? format(new Date(currentT.date), "yyyy-MM-dd") : ""}
+                                                value={currentT.date ? toDateInputUTC(currentT.date) : ""}
                                                 onChange={(e) => handleMassEditChange(t._id, "date", e.target.value)}
                                             />
-                                        ) : format(new Date(t.date), "MMM d, yyyy")}
+                                        ) : formatDateUTC(t.date)}
                                     </TableCell>
                                     <TableCell className="text-xs">
                                         {locations[t.location] || t.location}
@@ -1084,7 +1097,7 @@ export function TransactionsList({ itemId, headerContent }: TransactionsListProp
                         <Input 
                             type="date" 
                             className="col-span-3"
-                            value={editingTransaction.date ? format(new Date(editingTransaction.date), "yyyy-MM-dd") : ""}
+                            value={editingTransaction.date ? toDateInputUTC(editingTransaction.date) : ""}
                             onChange={(e) => setEditingTransaction({...editingTransaction, date: e.target.value})}
                         />
                     </div>

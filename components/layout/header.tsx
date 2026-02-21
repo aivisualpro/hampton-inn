@@ -106,17 +106,14 @@ export function Header() {
   if (pathname === "/login") return null;
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-white backdrop-blur supports-[backdrop-filter]:bg-white/95 pt-14 md:pt-4">
+    <header className="sticky top-0 z-50 w-full border-b bg-white backdrop-blur supports-[backdrop-filter]:bg-white/95">
       <div className="w-full flex h-12 items-center px-4">
         {/* Logo and Name: 50% mobile, 20% desktop */}
         <div className="w-[50%] md:w-[20%] flex items-center">
-            <Link href="/" className="flex items-center space-x-2">
-              <div className="relative h-8 w-8">
-                 <Image src="/logo.png" alt="Hampton Inn Logo" fill sizes="32px" className="object-contain" unoptimized />
+            <Link href="/" className="flex items-center">
+              <div className="relative h-10 w-28">
+                 <Image src="/logo.png" alt="Hampton by Hilton Logo" fill sizes="112px" className="object-contain" unoptimized />
               </div>
-              <span className="text-base md:text-lg font-bold tracking-tight text-gray-900 whitespace-nowrap">
-                Hampton Inn
-              </span>
             </Link>
         </div>
 

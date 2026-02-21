@@ -3,7 +3,7 @@
 
 import Link from "next/link";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { FileBarChart, ChevronRight } from "lucide-react";
+import { FileBarChart, ChevronRight, ClipboardList, AlertTriangle } from "lucide-react";
 
 export default function ReportsDashboard() {
   return (
@@ -34,6 +34,40 @@ export default function ReportsDashboard() {
                         <CardContent>
                             <p className="text-sm text-indigo-600/80">
                                 Analyze inventory par levels based on room configuration and item requirements.
+                            </p>
+                        </CardContent>
+                    </Card>
+               </Link>
+
+               {/* Closing Stock Report Card */}
+               <Link href="/admin/reports/closing-stock" className="block h-full">
+                    <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer bg-gradient-to-br from-emerald-50 to-green-50 border-green-100">
+                        <CardHeader className="flex flex-row items-center justify-between pb-2">
+                            <CardTitle className="text-xl font-semibold text-emerald-700">
+                                Closing Stock Report
+                            </CardTitle>
+                            <ClipboardList className="h-6 w-6 text-emerald-500" />
+                        </CardHeader>
+                        <CardContent>
+                            <p className="text-sm text-emerald-600/80">
+                                View current closing stock for every item across all locations.
+                            </p>
+                        </CardContent>
+                    </Card>
+               </Link>
+
+               {/* Restock Alerts Card */}
+               <Link href="/admin/reports/restock-alerts" className="block h-full">
+                    <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer bg-gradient-to-br from-amber-50 to-orange-50 border-orange-100">
+                        <CardHeader className="flex flex-row items-center justify-between pb-2">
+                            <CardTitle className="text-xl font-semibold text-amber-700">
+                                Restock Alerts
+                            </CardTitle>
+                            <AlertTriangle className="h-6 w-6 text-amber-500" />
+                        </CardHeader>
+                        <CardContent>
+                            <p className="text-sm text-amber-600/80">
+                                Identify items below restock thresholds with estimated reorder costs.
                             </p>
                         </CardContent>
                     </Card>

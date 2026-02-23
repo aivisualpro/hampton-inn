@@ -311,7 +311,7 @@ export default function ClosingStockReportPage() {
               <Search className="h-3.5 w-3.5" />
             </div>
           </div>
-          <Button size="sm" variant="outline" onClick={handleExport} className="h-8">
+          <Button size="sm" variant="outline" onClick={handleExport} className="h-8 hidden md:inline-flex">
             <Download className="mr-1.5 h-3.5 w-3.5" /> Export
           </Button>
         </div>

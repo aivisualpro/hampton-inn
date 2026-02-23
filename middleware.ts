@@ -13,6 +13,8 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/api/auth") ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon.ico") ||
+    pathname === "/sw.js" ||
+    pathname === "/manifest.json" ||
     pathname.includes(".") // static files like images
   ) {
     return NextResponse.next();

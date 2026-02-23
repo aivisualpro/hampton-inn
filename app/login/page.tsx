@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -13,12 +12,12 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    // Trigger entrance animations after mount
     const timer = setTimeout(() => setMounted(true), 100);
     return () => clearTimeout(timer);
   }, []);
@@ -32,7 +31,7 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, rememberMe }),
       });
 
       if (res.ok) {
@@ -132,6 +131,38 @@ export default function LoginPage() {
                 className="bg-white/10 border-white/20 text-white placeholder:text-white/30 focus-visible:ring-white/40 focus-visible:border-white/40 h-11 rounded-lg backdrop-blur-sm"
               />
             </div>
+
+            {/* Remember Me */}
+            <div
+              className="flex items-center gap-3 transition-all duration-700"
+              style={{ opacity: mounted ? 1 : 0, transitionDelay: "850ms" }}
+            >
+              <button
+                type="button"
+                role="checkbox"
+                aria-checked={rememberMe}
+                onClick={() => setRememberMe(!rememberMe)}
+                className="relative h-5 w-5 rounded-md border transition-all duration-200 flex items-center justify-center flex-shrink-0"
+                style={{
+                  borderColor: rememberMe ? "rgba(200, 16, 46, 0.8)" : "rgba(255,255,255,0.3)",
+                  background: rememberMe ? "linear-gradient(135deg, #C8102E 0%, #A00D24 100%)" : "rgba(255,255,255,0.08)",
+                  boxShadow: rememberMe ? "0 2px 8px rgba(200, 16, 46, 0.35)" : "none",
+                }}
+              >
+                {rememberMe && (
+                  <svg className="h-3 w-3 text-white" viewBox="0 0 12 12" fill="none">
+                    <path d="M2 6L5 9L10 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </button>
+              <label 
+                className="text-sm text-white/70 cursor-pointer select-none"
+                onClick={() => setRememberMe(!rememberMe)}
+              >
+                Remember me for 30 days
+              </label>
+            </div>
+
             {error && (
               <div className="text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg p-3 text-center font-medium animate-in fade-in slide-in-from-top-2 duration-300">
                 {error}

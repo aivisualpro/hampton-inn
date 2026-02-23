@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState, useCallback, Suspense, Fragment } from "react";
+import { useEffect, useState, useCallback, Suspense, Fragment, useRef } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { Loader2, Calendar, Pencil, Save, ChevronRight, ChevronLeft, Search, Utensils } from "lucide-react";
+import { Loader2, Calendar, Pencil, Save, ChevronRight, ChevronLeft, Search, Utensils, Camera, ImagePlus, Trash2, X, Eye, Upload, CheckCircle2, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -15,6 +16,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useToast } from "@/components/ui/use-toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 type Item = {
   _id: string;
@@ -37,6 +44,15 @@ type EditedValues = {
   [itemId: string]: {
     consumedUnit: number | string;
   };
+};
+
+type BreakfastImageType = {
+  _id: string;
+  date: string;
+  url: string;
+  publicId: string;
+  thumbnailUrl: string;
+  createdAt: string;
 };
 
 // LocalStorage keys
@@ -77,6 +93,18 @@ function DailyOccupancyContent() {
   const [isOccupancyEditing, setIsOccupancyEditing] = useState(false);
   const [tempOccupancyCount, setTempOccupancyCount] = useState<number>(0);
   const [tempOccupancyPercentage, setTempOccupancyPercentage] = useState<number>(0);
+
+  // Image states
+  const [imageModalOpen, setImageModalOpen] = useState(false);
+  const [breakfastImages, setBreakfastImages] = useState<BreakfastImageType[]>([]);
+  const [imageCount, setImageCount] = useState(0);
+  const [imageMax, setImageMax] = useState(3);
+  const [imageUploading, setImageUploading] = useState(false);
+  const [imageDeleting, setImageDeleting] = useState<string | null>(null);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const [kitchenId, setKitchenId] = useState<string | null>(null);
 
@@ -275,6 +303,72 @@ function DailyOccupancyContent() {
            setLoading(false);
        }
   }, [selectedDate, searchParams]); // dependencies
+
+  // ── Image Functions ──────────────────────────────────────────────────
+  const loadImages = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/breakfast-images?date=${selectedDate}`);
+      const data = await res.json();
+      setBreakfastImages(data.images || []);
+      setImageCount(data.count || 0);
+      setImageMax(data.max || 3);
+    } catch (e) {
+      console.error("Failed to load images:", e);
+    }
+  }, [selectedDate]);
+
+  useEffect(() => {
+    loadImages();
+  }, [loadImages]);
+
+  const handleImageUpload = async (file: File) => {
+    if (imageCount >= imageMax) {
+      toast({ variant: "destructive", title: "Limit Reached", description: `Maximum ${imageMax} images per day.` });
+      return;
+    }
+    setImageUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("date", selectedDate);
+      const res = await fetch("/api/breakfast-images", { method: "POST", body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Upload failed");
+      await loadImages();
+      toast({ title: "Image Uploaded", description: "Breakfast image added successfully." });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Upload Failed", description: e.message || "Failed to upload image." });
+    } finally {
+      setImageUploading(false);
+    }
+  };
+
+  const handleImageDelete = async (id: string) => {
+    setImageDeleting(id);
+    try {
+      const res = await fetch(`/api/breakfast-images?id=${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Delete failed");
+      await loadImages();
+      toast({ title: "Image Deleted", description: "Image removed successfully." });
+    } catch (e: any) {
+      toast({ variant: "destructive", title: "Delete Failed", description: e.message || "Failed to delete image." });
+    } finally {
+      setImageDeleting(null);
+    }
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files && files[0]) handleImageUpload(files[0]);
+    e.target.value = "";
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const files = e.dataTransfer.files;
+    if (files && files[0]) handleImageUpload(files[0]);
+  };
 
   useEffect(() => {
       loadData();
@@ -489,6 +583,22 @@ function DailyOccupancyContent() {
                     />
                 </div>
 
+                {/* Image Upload Button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={`h-9 gap-2 border-2 transition-all duration-200 ${
+                    imageCount > 0
+                      ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:border-emerald-400'
+                      : 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100 hover:border-amber-400'
+                  }`}
+                  onClick={() => setImageModalOpen(true)}
+                >
+                  <Camera className="h-4 w-4" />
+                  <span className="text-sm font-semibold">{imageCount}/{imageMax}</span>
+                  {imageCount >= imageMax && <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />}
+                </Button>
+
                 {/* Occupancy Count */}
                 <div className="flex items-center gap-2 px-3 py-1 bg-purple-50 rounded-lg border border-purple-200 h-9">
                     <span className="text-sm text-purple-600 font-medium">Occupancy</span>
@@ -656,6 +766,22 @@ function DailyOccupancyContent() {
               <ChevronRight className="h-4 w-4" />
             </Button>
             <div className="flex-1" />
+            {/* Image Upload Button - Mobile */}
+            <Button
+              variant="outline"
+              size="icon"
+              className={`h-10 w-10 shrink-0 border-2 transition-all duration-200 relative ${
+                imageCount > 0
+                  ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                  : 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100'
+              }`}
+              onClick={() => setImageModalOpen(true)}
+            >
+              <Camera className="h-4 w-4" />
+              <span className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-orange-500 text-white text-[10px] font-bold flex items-center justify-center shadow-sm">
+                {imageCount}
+              </span>
+            </Button>
             {!isEditMode ? (
               <Button onClick={handleEditStock} size="icon" className="h-10 w-10 shrink-0">
                 <Pencil className="h-4 w-4" />
@@ -884,6 +1010,217 @@ function DailyOccupancyContent() {
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
+        </div>
+      )}
+
+      {/* ── Breakfast Image Modal ────────────────────────────────────────── */}
+      <Dialog open={imageModalOpen} onOpenChange={setImageModalOpen}>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto p-0" showCloseButton={false}>
+          {/* Header with gradient */}
+          <div className="relative overflow-hidden rounded-t-xl">
+            <div className="absolute inset-0 bg-gradient-to-br from-orange-400 via-rose-400 to-purple-500 opacity-90" />
+            <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48ZGVmcz48cGF0dGVybiBpZD0iYSIgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBwYXR0ZXJuVW5pdHM9InVzZXJTcGFjZU9uVXNlIj48Y2lyY2xlIGN4PSIyMCIgY3k9IjIwIiByPSIyIiBmaWxsPSJyZ2JhKDI1NSwyNTUsMjU1LDAuMSkiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IGZpbGw9InVybCgjYSkiIHdpZHRoPSIyMDAiIGhlaWdodD0iMjAwIi8+PC9zdmc+')] opacity-30" />
+            <div className="relative px-6 py-5 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Camera className="h-5 w-5" />
+                  Breakfast Photos
+                </h2>
+                <p className="text-white/80 text-xs mt-0.5">
+                  {new Date(selectedDate + "T00:00:00").toLocaleDateString("en-US", {
+                    weekday: "long",
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  })}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1.5 bg-white/20 backdrop-blur-sm rounded-full px-3 py-1.5">
+                  {[...Array(imageMax)].map((_, i) => (
+                    <div
+                      key={i}
+                      className={`h-2.5 w-2.5 rounded-full transition-all duration-300 ${
+                        i < imageCount
+                          ? 'bg-white shadow-[0_0_6px_rgba(255,255,255,0.6)] scale-110'
+                          : 'bg-white/30'
+                      }`}
+                    />
+                  ))}
+                </div>
+                <button
+                  onClick={() => setImageModalOpen(false)}
+                  className="rounded-full p-1.5 bg-white/20 backdrop-blur-sm hover:bg-white/30 transition-colors"
+                >
+                  <X className="h-4 w-4 text-white" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-5 space-y-4">
+            {/* Image Gallery */}
+            {breakfastImages.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium text-gray-600">
+                  <Eye className="h-4 w-4" />
+                  <span>Uploaded Images ({imageCount}/{imageMax})</span>
+                </div>
+                <div className="grid grid-cols-3 gap-3">
+                  {breakfastImages.map((img) => (
+                    <div
+                      key={img._id}
+                      className="group relative aspect-square rounded-xl overflow-hidden border-2 border-gray-100 shadow-sm hover:shadow-lg hover:border-orange-200 transition-all duration-300"
+                    >
+                      <img
+                        src={img.url}
+                        alt="Breakfast"
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                        loading="lazy"
+                      />
+                      {/* Overlay on hover */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-all duration-300" />
+                      
+                      {/* Action buttons */}
+                      <div className="absolute bottom-2 left-2 right-2 flex justify-between items-center opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-2 group-hover:translate-y-0">
+                        <button
+                          onClick={() => setPreviewImage(img.url)}
+                          className="p-2 bg-white/90 backdrop-blur-sm rounded-lg shadow-lg hover:bg-white transition-colors"
+                        >
+                          <Eye className="h-3.5 w-3.5 text-gray-700" />
+                        </button>
+                        <button
+                          onClick={() => handleImageDelete(img._id)}
+                          disabled={imageDeleting === img._id}
+                          className="p-2 bg-red-500/90 backdrop-blur-sm rounded-lg shadow-lg hover:bg-red-600 transition-colors disabled:opacity-50"
+                        >
+                          {imageDeleting === img._id ? (
+                            <Loader2 className="h-3.5 w-3.5 text-white animate-spin" />
+                          ) : (
+                            <Trash2 className="h-3.5 w-3.5 text-white" />
+                          )}
+                        </button>
+                      </div>
+
+                      {/* Upload time badge */}
+                      <div className="absolute top-2 right-2 bg-black/50 backdrop-blur-sm text-white text-[10px] px-2 py-0.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                        {new Date(img.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Upload Zone */}
+            {imageCount < imageMax && (
+              <div
+                className={`relative rounded-2xl border-2 border-dashed transition-all duration-300 ${
+                  dragOver
+                    ? 'border-orange-400 bg-orange-50 scale-[1.02] shadow-lg shadow-orange-100'
+                    : 'border-gray-200 bg-gray-50/50 hover:border-orange-300 hover:bg-orange-50/30'
+                }`}
+                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={handleDrop}
+              >
+                {imageUploading ? (
+                  <div className="flex flex-col items-center justify-center py-10 gap-3">
+                    <div className="relative">
+                      <div className="h-14 w-14 rounded-full border-4 border-orange-200 border-t-orange-500 animate-spin" />
+                      <Upload className="h-5 w-5 text-orange-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2" />
+                    </div>
+                    <p className="text-sm text-orange-600 font-medium animate-pulse">Uploading image...</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center justify-center py-8 gap-4">
+                    <div className="relative">
+                      <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-orange-100 to-rose-100 flex items-center justify-center shadow-sm">
+                        <ImagePlus className="h-7 w-7 text-orange-500" />
+                      </div>
+                      <div className="absolute -top-1 -right-1 h-5 w-5 bg-orange-500 rounded-full flex items-center justify-center text-white text-[10px] font-bold shadow-sm">
+                        {imageMax - imageCount}
+                      </div>
+                    </div>
+                    <div className="text-center space-y-1">
+                      <p className="text-sm font-semibold text-gray-700">Add Breakfast Photo</p>
+                      <p className="text-xs text-gray-400">Drag & drop or use buttons below</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-2 border-orange-200 text-orange-700 hover:bg-orange-50 hover:border-orange-300 rounded-xl shadow-sm"
+                        onClick={() => fileInputRef.current?.click()}
+                      >
+                        <Upload className="h-4 w-4" />
+                        Gallery
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="gap-2 bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600 text-white rounded-xl shadow-sm shadow-orange-200"
+                        onClick={() => cameraInputRef.current?.click()}
+                      >
+                        <Camera className="h-4 w-4" />
+                        Camera
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* All slots filled */}
+            {imageCount >= imageMax && (
+              <div className="flex items-center gap-3 bg-emerald-50 rounded-xl px-4 py-3 border border-emerald-200">
+                <div className="h-8 w-8 rounded-full bg-emerald-500 flex items-center justify-center shadow-sm">
+                  <CheckCircle2 className="h-4.5 w-4.5 text-white" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-emerald-800">All photos uploaded!</p>
+                  <p className="text-xs text-emerald-600">All {imageMax} image slots are filled for this date.</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Hidden file inputs */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleFileSelect}
+          />
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={handleFileSelect}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Fullscreen Image Preview (Lightbox) ─────────────────────────── */}
+      {previewImage && (
+        <div
+          className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={() => setPreviewImage(null)}
+        >
+          <button
+            className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors z-10"
+            onClick={() => setPreviewImage(null)}
+          >
+            <X className="h-6 w-6 text-white" />
+          </button>
+          <img
+            src={previewImage}
+            alt="Breakfast - Full Preview"
+            className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl animate-in zoom-in-95 duration-300"
+            onClick={(e) => e.stopPropagation()}
+          />
         </div>
       )}
     </div>

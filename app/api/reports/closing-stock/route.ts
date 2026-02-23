@@ -1,13 +1,24 @@
-
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import connectToDatabase from "@/lib/db";
 import Item from "@/models/Item";
 import Location from "@/models/Location";
 import Transaction from "@/models/Transaction";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
     await connectToDatabase();
     try {
+        const { searchParams } = new URL(request.url);
+        const dateParam = searchParams.get("date"); // YYYY-MM-DD
+
+        // Build the end-of-day cutoff for the target date
+        let cutoffDate: Date;
+        if (dateParam) {
+            cutoffDate = new Date(dateParam + "T23:59:59.999Z");
+        } else {
+            cutoffDate = new Date();
+            cutoffDate.setHours(23, 59, 59, 999);
+        }
+
         // 1. Fetch ALL Items
         const items = await Item.find().lean();
         const itemIds = items.map(i => i._id.toString());
@@ -26,8 +37,11 @@ export async function GET() {
         const itemMap = new Map();
         items.forEach(i => itemMap.set(i._id.toString(), i));
 
-        // 3. Calculate closing stock per item per location
-        const transactions = await Transaction.find({ item: { $in: itemIds } })
+        // 3. Fetch transactions up to and including the cutoff date
+        const transactions = await Transaction.find({
+            item: { $in: itemIds },
+            date: { $lte: cutoffDate },
+        })
             .sort({ date: -1, createdAt: -1 })
             .lean();
 

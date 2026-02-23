@@ -4,10 +4,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { PageTitle } from "@/components/layout/page-title";
-import { Search, X, User, LogOut } from "lucide-react";
-import { Input } from "@/components/ui/input";
+import { User, LogOut, ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,79 +15,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export function Header() {
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [results, setResults] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
   const router = useRouter();
   const pathname = usePathname();
 
   useEffect(() => {
     setMounted(true);
   }, []);
-
-  useEffect(() => {
-    if (isSearchOpen && inputRef.current) {
-      inputRef.current.focus();
-    }
-  }, [isSearchOpen]);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setIsSearchOpen(false);
-        setSearchQuery("");
-        setResults([]);
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, []);
-
-  const handleSearch = async (query: string) => {
-    setSearchQuery(query);
-    if (!query.trim()) {
-      setResults([]);
-      return;
-    }
-
-    setLoading(true);
-    try {
-      // Search items
-      const itemsRes = await fetch("/api/items");
-      if (itemsRes.ok) {
-        const items = await itemsRes.json();
-        const filtered = items.filter((item: any) =>
-          item.item?.toLowerCase().includes(query.toLowerCase()) ||
-          item.category?.toLowerCase().includes(query.toLowerCase()) ||
-          item.subCategory?.toLowerCase().includes(query.toLowerCase()) ||
-          item.package?.toLowerCase().includes(query.toLowerCase())
-        ).slice(0, 5).map((item: any) => ({
-          ...item,
-          type: "item",
-          href: "/admin/items"
-        }));
-        setResults(filtered);
-      }
-    } catch (error) {
-      console.error("Search error:", error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleResultClick = (result: any) => {
-    setIsSearchOpen(false);
-    setSearchQuery("");
-    setResults([]);
-    // Navigate with query param to filter on the destination page
-    const params = new URLSearchParams();
-    params.set("q", result.item);
-    router.push(`${result.href}?${params.toString()}`);
-  };
 
   const handleLogout = async () => {
     setLoggingOut(true);
@@ -106,46 +40,81 @@ export function Header() {
     }
   };
 
-  /* Search functionality preserved in state but hidden from UI per request */
-  
   if (!mounted || pathname === "/login") return null;
 
+  const isHome = pathname === "/";
+  const isDeepPage = pathname.split("/").filter(Boolean).length > 1;
+
   return (
-    <header className="flex-none z-50 w-full border-b bg-white">
-      <div className="w-full flex h-12 items-center px-4">
-        {/* Logo and Name: 50% mobile, 20% desktop */}
-        <div className="w-[50%] md:w-[20%] flex items-center">
-            <Link href="/" className="flex items-center">
-              <div className="relative h-10 w-28">
-                 <Image src="/logo.png" alt="Hampton by Hilton Logo" fill sizes="112px" className="object-contain" unoptimized />
+    <header className="flex-none z-50 w-full bg-white/80 backdrop-blur-xl border-b border-gray-200/60" style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+      <div className="w-full flex h-14 items-center px-4 relative">
+
+        {/* Left: Logo (home) or Back button (inner pages) */}
+        <div className="flex items-center min-w-[120px]">
+          {isHome ? (
+            <Link href="/" className="flex items-center group">
+              <div className="relative h-10 w-28 transition-transform duration-200 group-hover:scale-105">
+                <Image
+                  src="/logo.png"
+                  alt="Hampton by Hilton"
+                  fill
+                  sizes="112px"
+                  className="object-contain"
+                  unoptimized
+                />
               </div>
             </Link>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 rounded-xl hover:bg-gray-100/80 transition-all duration-200"
+                onClick={() => router.back()}
+              >
+                <ChevronLeft className="h-5 w-5 text-gray-500" />
+              </Button>
+              <Link href="/" className="flex items-center">
+                <div className="relative h-8 w-20 opacity-70 hover:opacity-100 transition-opacity duration-200">
+                  <Image
+                    src="/logo.png"
+                    alt="Hampton by Hilton"
+                    fill
+                    sizes="80px"
+                    className="object-contain"
+                    unoptimized
+                  />
+                </div>
+              </Link>
+            </div>
+          )}
         </div>
 
-        {/* Route Title: hidden on mobile, 20% desktop */}
-        <div className="hidden md:flex md:w-[20%] items-center">
-           <PageTitle />
+        {/* Center: Route Title — absolute positioned for true centering */}
+        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+          <PageTitle />
         </div>
 
-        {/* Empty space: hidden on mobile, 50% on desktop */}
-        <div className="hidden md:block md:w-[50%]"></div>
-
-        {/* User Avatar with Dropdown: 50% mobile, 10% desktop */}
-        <div className="w-[50%] md:w-[10%] flex justify-end items-center">
+        {/* Right: User Menu */}
+        <div className="ml-auto flex items-center">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="rounded-full">
-                <div className="h-9 w-9 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center overflow-hidden">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-xl h-9 w-9 hover:bg-gray-100/80 transition-all duration-200"
+              >
+                <div className="h-8 w-8 rounded-xl bg-gradient-to-br from-gray-100 to-gray-200 border border-gray-200/80 flex items-center justify-center overflow-hidden transition-all duration-200 hover:from-gray-200 hover:to-gray-300 hover:shadow-sm">
                   <span className="sr-only">User menu</span>
-                  <User className="h-5 w-5 text-gray-500" />
+                  <User className="h-4 w-4 text-gray-500" />
                 </div>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-40">
-              <DropdownMenuItem 
+            <DropdownMenuContent align="end" className="w-44 rounded-xl shadow-lg border-gray-200/60">
+              <DropdownMenuItem
                 onClick={handleLogout}
                 disabled={loggingOut}
-                className="cursor-pointer"
+                className="cursor-pointer rounded-lg text-red-600 focus:text-red-600 focus:bg-red-50"
               >
                 <LogOut className="mr-2 h-4 w-4" />
                 {loggingOut ? "Logging out..." : "Logout"}

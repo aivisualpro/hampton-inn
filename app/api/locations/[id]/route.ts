@@ -30,6 +30,16 @@ export async function PUT(
   try {
     const { id } = await params;
     await connectToDatabase();
+
+    // Check if this is a Purchase Location - prevent editing
+    const existingLocation = await Location.findById(id);
+    if (existingLocation?.isPurchaseLocation) {
+      return NextResponse.json(
+        { error: "Purchase Location cannot be edited" },
+        { status: 403 }
+      );
+    }
+
     const body = await request.json();
 
     const updatedLocation = await Location.findByIdAndUpdate(id, body, {
@@ -55,6 +65,16 @@ export async function DELETE(
   try {
     const { id } = await params;
     await connectToDatabase();
+
+    // Check if this is a Purchase Location - prevent deletion
+    const existingLocation = await Location.findById(id);
+    if (existingLocation?.isPurchaseLocation) {
+      return NextResponse.json(
+        { error: "Purchase Location cannot be deleted" },
+        { status: 403 }
+      );
+    }
+
     const deletedLocation = await Location.findByIdAndDelete(id);
 
     if (!deletedLocation) {

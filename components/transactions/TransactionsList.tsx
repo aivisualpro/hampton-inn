@@ -2,8 +2,9 @@
 
 import { useEffect, useState, useRef, useMemo } from "react";
 import Link from "next/link";
-import { Loader2, ChevronRight, Search, Pencil, Trash2, MoreHorizontal, Calendar as CalendarIcon, Filter, X, Save, Box, Circle, Droplets, ShoppingCart, BedDouble, ClipboardList } from "lucide-react";
+import { Loader2, ChevronRight, Search, Pencil, Trash2, MoreHorizontal, Calendar as CalendarIcon, Filter, X, Save, Box, Circle, Droplets, ShoppingCart, BedDouble, ClipboardList, ArrowRightLeft } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -80,8 +81,12 @@ type Transaction = {
 const TransactionIcon = ({ t }: { t: Partial<Transaction> }) => {
     const icons = [];
     
+    // Stock Transfer gets its own icon
+    if (t.source === "Stock Transfer") {
+         icons.push(<ArrowRightLeft key="transfer" className="h-4 w-4 text-purple-500" />);
+    }
     // If source is Soak Cycle, show purely the Droplets icon
-    if (t.source === "Soak Cycle") {
+    else if (t.source === "Soak Cycle") {
          icons.push(<Droplets key="soak" className="h-4 w-4 text-cyan-500" />);
     } else {
         // Standard logic for other transactions
@@ -220,24 +225,45 @@ export function TransactionsList({ itemId, headerContent }: TransactionsListProp
   const handleDeleteSelected = async () => {
     if (selectedIds.size === 0) return;
     
-    // Optimistic
     const prev = [...transactions];
     const idsToDelete = Array.from(selectedIds);
-    
-    if (!window.confirm(`Delete ${idsToDelete.length} transactions?`)) return;
+    const count = idsToDelete.length;
 
-    setTransactions(prev => prev.filter(t => !selectedIds.has(t._id)));
+    // Optimistic removal
+    setTransactions(t => t.filter(tx => !selectedIds.has(tx._id)));
     setSelectedIds(new Set());
-    toast({ title: "Deleted", description: `Deleting ${idsToDelete.length} transactions...` });
 
-    try {
+    // Track whether user clicked Undo
+    let undone = false;
+
+    toast({
+      title: `${count} transaction${count > 1 ? "s" : ""} deleted`,
+      description: "This action will be permanent shortly.",
+      action: (
+        <ToastAction
+          altText="Undo delete"
+          onClick={() => {
+            undone = true;
+            setTransactions(prev); // Revert
+            toast({ title: "Restored", description: `${count} transaction${count > 1 ? "s" : ""} restored.` });
+          }}
+        >
+          Undo
+        </ToastAction>
+      ),
+    });
+
+    // Delay actual deletion to give time for undo
+    setTimeout(async () => {
+      if (undone) return;
+      try {
         await Promise.all(idsToDelete.map(id => fetch(`/api/transactions/${id}`, { method: "DELETE" })));
-        toast({ title: "Success", description: "Transactions deleted." });
-    } catch(e) {
+      } catch (e) {
         console.error(e);
-        setTransactions(prev); // Revert
-        toast({ variant: "destructive", title: "Error", description: "Failed to delete items." });
-    }
+        setTransactions(prev); // Revert on error
+        toast({ variant: "destructive", title: "Error", description: "Failed to delete transactions." });
+      }
+    }, 4000);
   };
 
   const fetchData = async (signal?: AbortSignal) => {
@@ -880,7 +906,7 @@ export function TransactionsList({ itemId, headerContent }: TransactionsListProp
                                     return (pkg * size) + unit;
                                 };
 
-                                const CellDisplay = ({ pkg, unit, itemId, fieldPkg, fieldUnit, isEdit, showTotalOnly = false, isStockDisplay = false }: { 
+                                const CellDisplay = ({ pkg, unit, itemId, fieldPkg, fieldUnit, isEdit, showTotalOnly = false, isStockDisplay = false, negativeTotal = false }: { 
                                     pkg?: number; 
                                     unit?: number; 
                                     itemId: string;
@@ -889,6 +915,7 @@ export function TransactionsList({ itemId, headerContent }: TransactionsListProp
                                     isEdit?: boolean;
                                     showTotalOnly?: boolean;
                                     isStockDisplay?: boolean;
+                                    negativeTotal?: boolean;
                                 }) => {
                                     const itemDef = items[itemId];
                                     const hasPackage = !!itemDef?.package && itemDef.package !== "0";
@@ -951,8 +978,8 @@ export function TransactionsList({ itemId, headerContent }: TransactionsListProp
                                                     <span className="font-mono">{dispUnit}</span>
                                                 </div>
                                                 {hasPackage && (
-                                                    <div className="text-muted-foreground font-semibold">
-                                                        ({totalCount})
+                                                    <div className={`font-semibold ${negativeTotal ? 'text-red-500' : 'text-muted-foreground'}`}>
+                                                        ({negativeTotal ? `-${totalCount}` : totalCount})
                                                     </div>
                                                 )}
                                             </div>
@@ -1043,7 +1070,7 @@ export function TransactionsList({ itemId, headerContent }: TransactionsListProp
                                         {currentT.source === "Stock Purchase" || (currentT.source === "Stock Count" && !currentT.consumedUnit && !currentT.consumedPackage) ? (
                                             <span className="text-muted-foreground">-</span>
                                         ) : (
-                                            <CellDisplay pkg={currentT.consumedPackage} unit={currentT.consumedUnit} itemId={t.item} isEdit={isMassEditMode} fieldPkg="consumedPackage" fieldUnit="consumedUnit" isStockDisplay />
+                                            <CellDisplay pkg={currentT.consumedPackage} unit={currentT.consumedUnit} itemId={t.item} isEdit={isMassEditMode} fieldPkg="consumedPackage" fieldUnit="consumedUnit" isStockDisplay negativeTotal={currentT.source === "Stock Transfer" && ((currentT.consumedUnit || 0) > 0 || (currentT.consumedPackage || 0) > 0)} />
                                         )}
                                     </TableCell>
                                     <TableCell className="text-center font-mono text-xs font-bold bg-gray-50/50">

@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, Suspense, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
-import { Loader2, MapPin, ChevronDown, Calendar, Pencil, Save, ChevronRight, Search, ChevronLeft } from "lucide-react";
+import { Loader2, Calendar, Pencil, Save, ChevronRight, Search, ChevronLeft, Package, ShoppingCart } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,12 +15,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 
 type Location = {
   _id: string;
@@ -29,12 +23,14 @@ type Location = {
   inventoryType?: string;
   category?: string;
   items?: string[];
+  isPurchaseLocation?: boolean;
 };
 
 type Item = {
   _id: string;
   item: string;
   package?: string;
+  category?: string;
 };
 
 type ItemWithPurchase = Item & {
@@ -51,15 +47,6 @@ type EditedValues = {
   };
 };
 
-type User = {
-  _id: string;
-  name: string;
-  email: string;
-  locations: string[];
-  lastSelectedLocation?: string;
-  firstLoaded?: boolean;
-};
-
 const getPackageSize = (packageStr?: string): number => {
     if (!packageStr) return 1;
     const match = packageStr.match(/(\d+)/);
@@ -68,7 +55,6 @@ const getPackageSize = (packageStr?: string): number => {
 
 // LocalStorage keys for instant loading
 const STORAGE_KEYS = {
-  LAST_LOCATION: "hampton_last_location",
   LAST_DATE: "hampton_last_date",
 };
 
@@ -93,14 +79,10 @@ const writeToStorage = (key: string, value: string): void => {
 };
 
 function StockPurchaseContent() {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [allLocations, setAllLocations] = useState<Location[]>([]);
-  const [userLocations, setUserLocations] = useState<Location[]>([]);
+  const [purchaseLocation, setPurchaseLocation] = useState<Location | null>(null);
   const [allItems, setAllItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [isLocationSelectorOpen, setIsLocationSelectorOpen] = useState(false);
-  const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
   const [editedValues, setEditedValues] = useState<EditedValues>({});
   const { toast } = useToast();
@@ -108,14 +90,6 @@ function StockPurchaseContent() {
   // Scroll / Pagination state
   const [visibleCount, setVisibleCount] = useState(20);
   const observerTarget = useRef(null);
-  
-  // Reset visible count on search or location change
-  useEffect(() => {
-    setVisibleCount(20);
-  }, [selectedLocation]); // We'll add searchQuery dependency later or now if available. 
-  // Wait, searchQuery is defined at line 126. So I should place this effect further down.
-
-
 
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -124,7 +98,6 @@ function StockPurchaseContent() {
   const getDateFromUrl = () => {
     const paramDate = searchParams.get("date");
     if (paramDate) return paramDate;
-    // Check localStorage first for instant loading
     const cachedDate = readFromStorage(STORAGE_KEYS.LAST_DATE);
     if (cachedDate) return cachedDate;
     const now = new Date();
@@ -144,17 +117,13 @@ function StockPurchaseContent() {
   }, [selectedDate]);
 
   const saveDatePreference = (dateStr: string) => {
-    // Write to localStorage IMMEDIATELY
     writeToStorage(STORAGE_KEYS.LAST_DATE, dateStr);
-    // Sync to server (async, non-blocking)
     fetch("/api/auth/me", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ lastSelectedDate: dateStr })
     }).catch(e => console.error("Failed to save date preference", e));
   };
-
-
 
   const updateUrl = useCallback((key: string, value: string | null) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -184,7 +153,6 @@ function StockPurchaseContent() {
   };
 
   const handlePrevDay = () => {
-    // Parse date parts manually to avoid timezone shifts
     const [year, month, day] = selectedDate.split('-').map(Number);
     const currentDate = new Date(Date.UTC(year, month - 1, day - 1));
     const newDateStr = `${currentDate.getUTCFullYear()}-${String(currentDate.getUTCMonth() + 1).padStart(2, '0')}-${String(currentDate.getUTCDate()).padStart(2, '0')}`;
@@ -192,43 +160,10 @@ function StockPurchaseContent() {
   };
 
   const handleNextDay = () => {
-    // Parse date parts manually to avoid timezone shifts
     const [year, month, day] = selectedDate.split('-').map(Number);
     const currentDate = new Date(Date.UTC(year, month - 1, day + 1));
     const newDateStr = `${currentDate.getUTCFullYear()}-${String(currentDate.getUTCMonth() + 1).padStart(2, '0')}-${String(currentDate.getUTCDate()).padStart(2, '0')}`;
     updateUrl("date", newDateStr);
-  };
-
-
-
-  // Fetch current user
-  const fetchCurrentUser = async () => {
-    try {
-      const response = await fetch("/api/auth/me");
-      if (response.ok) {
-        const data = await response.json();
-        setCurrentUser(data);
-        return data;
-      }
-    } catch (error) {
-      console.error("Error fetching current user:", error);
-    }
-    return null;
-  };
-
-  // Fetch all locations
-  const fetchLocations = async () => {
-    try {
-      const response = await fetch("/api/locations");
-      if (response.ok) {
-        const data = await response.json();
-        setAllLocations(data);
-        return data;
-      }
-    } catch (error) {
-      console.error("Error fetching locations:", error);
-    }
-    return [];
   };
 
   // Fetch all items
@@ -244,89 +179,44 @@ function StockPurchaseContent() {
     }
   };
 
+  // Fetch the Purchase Location automatically
+  const fetchPurchaseLocation = async () => {
+    try {
+      const response = await fetch("/api/locations/set-purchase-location");
+      if (response.ok) {
+        const data = await response.json();
+        setPurchaseLocation(data);
+        return data;
+      }
+      return null;
+    } catch (error) {
+      console.error("Error fetching purchase location:", error);
+      return null;
+    }
+  };
+
   // Initial data load
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
       
-      // STEP 1: Read from localStorage IMMEDIATELY for instant UI
-      const cachedLocationId = readFromStorage(STORAGE_KEYS.LAST_LOCATION);
-      
-      // STEP 2: Fetch data from APIs
-      const [user, locations] = await Promise.all([
-        fetchCurrentUser(),
-        fetchLocations(),
+      const [location] = await Promise.all([
+        fetchPurchaseLocation(),
         fetchItems(),
       ]);
       
-      // Filter locations based on user's assigned locations
-      let filteredLocations = locations;
-      if (user && user.locations && user.locations.length > 0) {
-        filteredLocations = locations.filter((loc: Location) => 
-          user.locations.some((userLocIdOrName: string) => 
-            String(userLocIdOrName) === String(loc._id) || 
-            String(userLocIdOrName) === loc.name
-          )
-        );
-      }
-      setUserLocations(filteredLocations);
-
-      // STEP 3: Setup initial state and sync URL
+      // Set date in URL if not present
       const params = new URLSearchParams(window.location.search);
-      let needsUpdate = false;
-
-      // --- Location Handling ---
-      const urlLocationId = params.get("location");
-      let initialLocation: Location | undefined;
-
-      // Try URL first
-      if (urlLocationId) {
-        initialLocation = filteredLocations.find((l: Location) => l._id === urlLocationId);
-      } 
-      
-      // Try localStorage cache
-      if (!initialLocation && cachedLocationId) {
-        initialLocation = filteredLocations.find((l: Location) => l._id === cachedLocationId);
-      }
-      
-      // Try server preference
-      if (!initialLocation && user?.lastSelectedLocation) {
-        initialLocation = filteredLocations.find((l: Location) => l._id === user.lastSelectedLocation);
-        if (initialLocation) {
-          writeToStorage(STORAGE_KEYS.LAST_LOCATION, initialLocation._id);
-        }
-      }
-
-      if (initialLocation) {
-        setSelectedLocation(initialLocation);
-        if (!urlLocationId) {
-          params.set("location", initialLocation._id);
-          needsUpdate = true;
-        }
-      }
-
-      // --- Date Handling ---
-      const urlDate = params.get("date");
-      if (!urlDate) {
+      if (!params.get("date")) {
         let dateToSet = readFromStorage(STORAGE_KEYS.LAST_DATE);
-        
-        if (!dateToSet && user?.lastSelectedDate) {
-          dateToSet = user.lastSelectedDate;
-        }
-        
         if (!dateToSet) {
-            const now = new Date();
-            const year = now.getFullYear();
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const day = String(now.getDate()).padStart(2, '0');
-            dateToSet = `${year}-${month}-${day}`;
+          const now = new Date();
+          const year = now.getFullYear();
+          const month = String(now.getMonth() + 1).padStart(2, '0');
+          const day = String(now.getDate()).padStart(2, '0');
+          dateToSet = `${year}-${month}-${day}`;
         }
-        
         params.set("date", dateToSet);
-        needsUpdate = true;
-      }
-
-      if (needsUpdate) {
         router.replace(`${pathname}?${params.toString()}`);
       }
       
@@ -335,11 +225,10 @@ function StockPurchaseContent() {
     loadData();
   }, []);
 
-  // Items for current location with purchase data
-  // Reset visible count on search or location change
+  // Reset visible count on search change
   useEffect(() => {
     setVisibleCount(20);
-  }, [searchQuery, selectedLocation]);
+  }, [searchQuery, purchaseLocation]);
 
   // Infinite Scroll Observer
   useEffect(() => {
@@ -368,11 +257,10 @@ function StockPurchaseContent() {
 
   const [locationItems, setLocationItems] = useState<ItemWithPurchase[]>([]);
 
-  // Fetch purchase data when location or date changes - uses combined API for speed
+  // Fetch purchase data - uses ALL items since Purchase Location receives everything
   useEffect(() => {
-    if (!selectedLocation || !selectedDate || allItems.length === 0) return;
+    if (!purchaseLocation || !selectedDate || allItems.length === 0) return;
     
-    // Reset edit mode when location or date changes
     setIsEditMode(false);
     setEditedValues({});
     
@@ -381,48 +269,40 @@ function StockPurchaseContent() {
         setLoading(true);
         const params = new URLSearchParams({
           date: selectedDate,
-          location: selectedLocation._id,
+          location: purchaseLocation._id,
         });
         
-        // Single API call for both opening balances and transactions
         const response = await fetch(`/api/stock/combined?${params}`);
         const data = await response.json();
         
-        const locationItemIds = selectedLocation.items || [];
-        const filteredItems = allItems.filter(item => locationItemIds.includes(item._id));
+        // Use ALL items since Purchase Location collects everything
+        const filteredItems = allItems;
         
         const openingMap = data.openingBalances || {};
         const transMap = data.transactions || {};
         
-          const mappedItems: ItemWithPurchase[] = filteredItems.map(item => {
-            const rawOpeningUnit = openingMap[item._id]?.unit || 0;
-            const rawOpeningPkg = openingMap[item._id]?.package || 0; // Usually 0 if countedUnit was total
+        const mappedItems: ItemWithPurchase[] = filteredItems.map(item => {
+          const rawOpeningUnit = openingMap[item._id]?.unit || 0;
+          const rawOpeningPkg = openingMap[item._id]?.package || 0;
+          
+          const pkgSize = getPackageSize(item.package);
+          let openingUnit = rawOpeningUnit;
+          let openingPackage = rawOpeningPkg;
 
-            // If we have a package size, and the API returned a total count in 'unit', let's try to interpret it
-            // BUT, usually openingBalances returns exactly what was in the DB.
-            // If the DB stores Total in countedUnit, we want to split it for display.
-            
-            const pkgSize = getPackageSize(item.package);
-            let openingUnit = rawOpeningUnit;
-            let openingPackage = rawOpeningPkg;
+          if (pkgSize > 1) {
+            const total = rawOpeningUnit + (rawOpeningPkg * pkgSize);
+            openingPackage = Math.floor(total / pkgSize);
+            openingUnit = total % pkgSize;
+          }
 
-            if (pkgSize > 1) {
-                // Assuming rawOpeningUnit is the TOTAL count (since we save total in countedUnit)
-                // And rawOpeningPkg is likely 0 or irrelevant if we only use countedUnit for totals.
-                // We recalculate standard breakdown:
-                const total = rawOpeningUnit + (rawOpeningPkg * pkgSize);
-                openingPackage = Math.floor(total / pkgSize);
-                openingUnit = total % pkgSize;
-            }
-
-            return {
-              ...item,
-              openingBalanceUnit: openingUnit,
-              openingBalancePackage: openingPackage,
-              purchasedUnit: transMap[item._id]?.purchasedUnit || 0,
-              purchasedPackage: transMap[item._id]?.purchasedPackage || 0,
-            };
-          });
+          return {
+            ...item,
+            openingBalanceUnit: openingUnit,
+            openingBalancePackage: openingPackage,
+            purchasedUnit: transMap[item._id]?.purchasedUnit || 0,
+            purchasedPackage: transMap[item._id]?.purchasedPackage || 0,
+          };
+        });
         
         setLocationItems(mappedItems);
       } catch (error) {
@@ -433,27 +313,7 @@ function StockPurchaseContent() {
     };
     
     fetchPurchaseData();
-  }, [selectedLocation, selectedDate, allItems]);
-
-  const handleLocationSelect = async (location: Location) => {
-    setSelectedLocation(location);
-    setIsLocationSelectorOpen(false);
-    updateUrl("location", location._id);
-    
-    // Write to localStorage IMMEDIATELY for instant loading next time
-    writeToStorage(STORAGE_KEYS.LAST_LOCATION, location._id);
-    
-    // Sync to server (async, non-blocking)
-    try {
-      await fetch("/api/auth/me", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lastSelectedLocation: location._id })
-      });
-    } catch(e) {
-      console.error("Failed to save location preference", e);
-    }
-  };
+  }, [purchaseLocation, selectedDate, allItems]);
 
   const handleUpdateStock = () => {
     const initial: EditedValues = {};
@@ -479,16 +339,12 @@ function StockPurchaseContent() {
       return editedValues[itemId][field];
     }
     const item = locationItems.find(i => i._id === itemId);
-    // deleted duplicate line
-
-    // If not edit mode, return "" for 0
     if (item && item[field] !== 0) {
-        return item[field];
+      return item[field];
     }
     return "";
   };
 
-  // Format values as "pkg / unit (total)" e.g. "11 / 0 (132)"
   const formatPkgUnit = (pkg: number, unit: number, pkgStr?: string) => {
     const pkgSize = getPackageSize(pkgStr);
     const hasPkg = !!pkgStr && pkgStr !== "0" && pkgSize > 1;
@@ -503,7 +359,7 @@ function StockPurchaseContent() {
   };
 
   const handleSave = async () => {
-    if (!selectedLocation) return;
+    if (!purchaseLocation) return;
     
     setSaving(true);
     try {
@@ -512,7 +368,6 @@ function StockPurchaseContent() {
         const opening = item?.openingBalanceUnit || 0;
         const openingPkg = item?.openingBalancePackage || 0;
         
-        // Check values as string "" or 0
         const isUnitEmpty = val.purchasedUnit === 0 || val.purchasedUnit === "";
         const isPkgEmpty = val.purchasedPackage === 0 || val.purchasedPackage === "";
 
@@ -523,16 +378,8 @@ function StockPurchaseContent() {
       });
 
       const promises = itemsToSave.map(([itemId, val]) => {
-        const item = locationItems.find(i => i._id === itemId);
-        const openingUnit = item?.openingBalanceUnit || 0;
-        const openingPkg = item?.openingBalancePackage || 0;
-        
         const valPurchasedUnit = val.purchasedUnit === "" ? 0 : Number(val.purchasedUnit);
         const valPurchasedPackage = val.purchasedPackage === "" ? 0 : Number(val.purchasedPackage);
-        
-        // Closing = Opening + Purchased
-        const closingUnit = openingUnit + valPurchasedUnit;
-        const closingPkg = openingPkg + valPurchasedPackage;
         
         return fetch("/api/transactions", {
           method: "POST",
@@ -540,7 +387,7 @@ function StockPurchaseContent() {
           body: JSON.stringify({
             date: selectedDate,
             item: itemId,
-            location: selectedLocation._id,
+            location: purchaseLocation._id,
             purchasedUnit: valPurchasedUnit,
             purchasedPackage: valPurchasedPackage,
             source: "Stock Purchase",
@@ -557,7 +404,7 @@ function StockPurchaseContent() {
       // Refresh data
       const params = new URLSearchParams({
         date: selectedDate,
-        location: selectedLocation._id,
+        location: purchaseLocation._id,
       });
       const transRes = await fetch(`/api/transactions?${params}`);
       const transactions = await transRes.json();
@@ -590,7 +437,6 @@ function StockPurchaseContent() {
     <div className="w-full h-full flex flex-col">
       {/* Top Controls */}
       <div className="border-b bg-white px-4 py-3">
-        {/* Breadcrumbs & Desktop Controls */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
             <div className="flex flex-1 items-center justify-between">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground mr-4">
@@ -601,21 +447,13 @@ function StockPurchaseContent() {
 
                 {/* Desktop Controls (Inline) */}
                 <div className="hidden lg:flex flex-1 items-center gap-3">
-                  {/* Location Selector */}
-                  <Button
-                    variant="outline"
-                    className="w-[180px] justify-between text-left h-8 text-xs"
-                    onClick={() => setIsLocationSelectorOpen(true)}
-                    disabled={isEditMode}
-                  >
-                    <div className="flex items-center gap-2 truncate">
-                      <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                      <span className={selectedLocation ? "font-medium truncate" : "text-muted-foreground truncate"}>
-                        {selectedLocation ? selectedLocation.name : "Select Location"}
-                      </span>
-                    </div>
-                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  </Button>
+                  {/* Purchase Location Badge */}
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gradient-to-r from-teal-50 to-emerald-50 border border-teal-200">
+                    <Package className="h-4 w-4 text-teal-600" />
+                    <span className="text-sm font-semibold text-teal-700">
+                      {purchaseLocation ? purchaseLocation.name : "Loading..."}
+                    </span>
+                  </div>
 
                   {/* Search */}
                   <div className="relative w-48 xl:w-64">
@@ -652,7 +490,7 @@ function StockPurchaseContent() {
                   <div className="flex-1" />
 
                   {/* Action Buttons */}
-                  {selectedLocation && locationItems.length > 0 && (
+                  {purchaseLocation && locationItems.length > 0 && (
                     <>
                       {!isEditMode ? (
                         <Button onClick={handleUpdateStock} size="sm" className="h-8">
@@ -675,24 +513,16 @@ function StockPurchaseContent() {
                 </div>
             </div>
 
-            {/* Mobile: Stacked rows (unchanged logic just properly placed) */}
+            {/* Mobile: Stacked rows */}
             <div className="lg:hidden space-y-3 w-full">
-              {/* Row 1: Location & Search */}
+              {/* Row 1: Purchase Location Badge & Search */}
               <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  className="flex-1 justify-between text-left h-10"
-                  onClick={() => setIsLocationSelectorOpen(true)}
-                  disabled={isEditMode}
-                >
-                  <div className="flex items-center gap-2 truncate">
-                    <MapPin className="h-4 w-4 text-muted-foreground shrink-0" />
-                    <span className={selectedLocation ? "font-medium truncate" : "text-muted-foreground truncate"}>
-                      {selectedLocation ? selectedLocation.name : "Select Location"}
-                    </span>
-                  </div>
-                  <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
-                </Button>
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-gradient-to-r from-teal-50 to-emerald-50 border border-teal-200 flex-shrink-0">
+                  <Package className="h-4 w-4 text-teal-600" />
+                  <span className="text-xs font-semibold text-teal-700 truncate max-w-[80px]">
+                    {purchaseLocation ? purchaseLocation.name : "..."}
+                  </span>
+                </div>
                 <div className="relative flex-1">
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
@@ -724,7 +554,7 @@ function StockPurchaseContent() {
                   <ChevronRight className="h-4 w-4" />
                 </Button>
                 <div className="flex-1" />
-                {selectedLocation && locationItems.length > 0 && (
+                {purchaseLocation && locationItems.length > 0 && (
                   <>
                     {!isEditMode ? (
                       <Button onClick={handleUpdateStock} size="icon" className="h-10 w-10 shrink-0">
@@ -763,16 +593,16 @@ function StockPurchaseContent() {
               </div>
             ))}
           </div>
-        ) : !selectedLocation ? (
+        ) : !purchaseLocation ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-            <MapPin className="h-12 w-12 mb-4 opacity-50" />
-            <p className="text-lg font-medium">No Location Selected</p>
-            <p className="text-sm">Please select a location to view its items</p>
+            <ShoppingCart className="h-12 w-12 mb-4 opacity-50" />
+            <p className="text-lg font-medium">Setting up Purchase Location...</p>
+            <p className="text-sm">Please wait while we configure the purchase location</p>
           </div>
         ) : locationItems.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
             <p className="text-lg font-medium">No Items</p>
-            <p className="text-sm">This location has no items assigned</p>
+            <p className="text-sm">No items are available for purchase</p>
           </div>
         ) : (
           <>
@@ -979,51 +809,6 @@ function StockPurchaseContent() {
       <div className="p-4 border-t bg-white text-xs text-muted-foreground text-center">
         Showing {displayedItems.length} of {filteredItems.length} items
       </div>
-
-      {/* Location Selector Dialog */}
-      <Dialog open={isLocationSelectorOpen} onOpenChange={setIsLocationSelectorOpen}>
-        <DialogContent className="sm:max-w-[400px] max-h-[80vh]">
-          <DialogHeader>
-            <DialogTitle>Select Location</DialogTitle>
-          </DialogHeader>
-          <div className="py-2">
-            {loading ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-              </div>
-            ) : userLocations.length === 0 ? (
-              <div className="text-center text-muted-foreground py-8">
-                No locations assigned to you.
-              </div>
-            ) : (
-              <div className="space-y-1 max-h-[400px] overflow-y-auto">
-                {userLocations.map((location) => (
-                  <div
-                    key={location._id}
-                    className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer hover:bg-muted transition-colors ${
-                      selectedLocation?._id === location._id ? "bg-primary/10 border border-primary/30" : ""
-                    }`}
-                    onClick={() => handleLocationSelect(location)}
-                  >
-                    <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center shrink-0">
-                      <MapPin className="h-5 w-5 text-muted-foreground" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">{location.name}</p>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {location.items?.length || 0} items
-                      </p>
-                    </div>
-                    {selectedLocation?._id === location._id && (
-                      <div className="h-2 w-2 rounded-full bg-primary shrink-0" />
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

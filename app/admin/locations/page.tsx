@@ -158,6 +158,7 @@ type Location = {
   inventoryType?: string;
   category?: string;
   items?: string[];
+  isPurchaseLocation?: boolean;
 };
 
   /* Item type definition for local usage */
@@ -330,6 +331,8 @@ export default function LocationsPage() {
   };
 
   const handleDelete = async (id: string) => {
+    const location = locations.find(l => l._id === id);
+    if (location?.isPurchaseLocation) return;
     if (!confirm("Are you sure you want to delete this location?")) return;
     try {
       const res = await fetch(`/api/locations/${id}`, { method: "DELETE" });
@@ -478,11 +481,18 @@ export default function LocationsPage() {
                   paginatedLocations.map((location) => (
                     <TableRow key={location._id} className="hover:bg-muted/50 border-b group">
                       <TableCell className="font-medium pl-4 py-2">
-                        <div 
-                          className="cursor-pointer hover:underline text-primary"
-                          onClick={() => setViewingLocation(location)}
-                        >
-                          {location.name}
+                        <div className="flex items-center gap-2">
+                          <div 
+                            className="cursor-pointer hover:underline text-primary"
+                            onClick={() => setViewingLocation(location)}
+                          >
+                            {location.name}
+                          </div>
+                          {location.isPurchaseLocation && (
+                            <span className="inline-flex items-center rounded-full bg-teal-100 text-teal-700 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider">
+                              Purchase
+                            </span>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell className="py-2">{location.description || "-"}</TableCell>
@@ -510,30 +520,34 @@ export default function LocationsPage() {
                                <Eye className="mr-2 h-4 w-4" />
                                Details
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleCopyItems(location)}>
-                              <Copy className="mr-2 h-4 w-4" />
-                              Copy Items
-                            </DropdownMenuItem>
-                            <DropdownMenuItem 
-                              onClick={() => handlePasteItems(location)}
-                              disabled={copiedItems.length === 0 || isPasting}
-                            >
-                              <ClipboardPaste className="mr-2 h-4 w-4" />
-                              Paste Items
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => handleOpenDialog(location)}>
-                              <Pencil className="mr-2 h-4 w-4" />
-                              Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem 
-                              className="text-red-600 focus:text-red-600"
-                              onClick={() => handleDelete(location._id)}
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete
-                            </DropdownMenuItem>
+                            {!location.isPurchaseLocation && (
+                              <>
+                                <DropdownMenuItem onClick={() => handleCopyItems(location)}>
+                                  <Copy className="mr-2 h-4 w-4" />
+                                  Copy Items
+                                </DropdownMenuItem>
+                                <DropdownMenuItem 
+                                  onClick={() => handlePasteItems(location)}
+                                  disabled={copiedItems.length === 0 || isPasting}
+                                >
+                                  <ClipboardPaste className="mr-2 h-4 w-4" />
+                                  Paste Items
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => handleOpenDialog(location)}>
+                                  <Pencil className="mr-2 h-4 w-4" />
+                                  Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem 
+                                  className="text-red-600 focus:text-red-600"
+                                  onClick={() => handleDelete(location._id)}
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
@@ -559,7 +573,14 @@ export default function LocationsPage() {
                   <Card key={location._id} className="bg-white shadow-sm border">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                        <CardTitle className="text-base font-bold">
-                         {location.name}
+                         <div className="flex items-center gap-2">
+                           {location.name}
+                           {location.isPurchaseLocation && (
+                             <span className="inline-flex items-center rounded-full bg-teal-100 text-teal-700 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider">
+                               Purchase
+                             </span>
+                           )}
+                         </div>
                        </CardTitle>
                        <DropdownMenu>
                           <DropdownMenuTrigger asChild>
@@ -573,30 +594,34 @@ export default function LocationsPage() {
                                <Eye className="mr-2 h-4 w-4" />
                                Details
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleCopyItems(location)}>
-                               <Copy className="mr-2 h-4 w-4" />
-                               Copy Items
-                            </DropdownMenuItem>
-                            <DropdownMenuItem 
-                              onClick={() => handlePasteItems(location)}
-                              disabled={copiedItems.length === 0 || isPasting}
-                            >
-                               <ClipboardPaste className="mr-2 h-4 w-4" />
-                               Paste Items
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem onClick={() => handleOpenDialog(location)}>
-                              <Pencil className="mr-2 h-4 w-4" />
-                              Edit
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem 
-                              className="text-red-600 focus:text-red-600"
-                              onClick={() => handleDelete(location._id)}
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete
-                            </DropdownMenuItem>
+                            {!location.isPurchaseLocation && (
+                              <>
+                                <DropdownMenuItem onClick={() => handleCopyItems(location)}>
+                                   <Copy className="mr-2 h-4 w-4" />
+                                   Copy Items
+                                </DropdownMenuItem>
+                                <DropdownMenuItem 
+                                  onClick={() => handlePasteItems(location)}
+                                  disabled={copiedItems.length === 0 || isPasting}
+                                >
+                                   <ClipboardPaste className="mr-2 h-4 w-4" />
+                                   Paste Items
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => handleOpenDialog(location)}>
+                                  <Pencil className="mr-2 h-4 w-4" />
+                                  Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem 
+                                  className="text-red-600 focus:text-red-600"
+                                  onClick={() => handleDelete(location._id)}
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </>
+                            )}
                           </DropdownMenuContent>
                         </DropdownMenu>
                     </CardHeader>
@@ -802,13 +827,15 @@ export default function LocationsPage() {
           )}
           <DialogFooter>
             <Button onClick={() => setViewingLocation(null)}>Close</Button>
-            <Button variant="outline" onClick={() => {
-                setViewingLocation(null);
-                handleOpenDialog(viewingLocation!);
-            }}>
-                <Pencil className="mr-2 h-4 w-4" />
-                Edit Location
-            </Button>
+            {!viewingLocation?.isPurchaseLocation && (
+              <Button variant="outline" onClick={() => {
+                  setViewingLocation(null);
+                  handleOpenDialog(viewingLocation!);
+              }}>
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Edit Location
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

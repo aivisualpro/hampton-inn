@@ -14,6 +14,7 @@ import {
   Shield,
   LucideIcon,
   Hotel,
+  ArrowRightLeft,
 } from "lucide-react";
 
 type Module = {
@@ -45,6 +46,15 @@ export default function Home() {
       image: "/bg_stock_purchase.png",
       value: "3 Pending",
       href: "/stock-purchase",
+    },
+    {
+      title: "Transfer Stock",
+      description: "Move stock between locations",
+      icon: ArrowRightLeft,
+      color: "text-orange-600",
+      image: "/bg_transfer_stock.png",
+      value: "Transfer",
+      href: "/stock-transfer",
     },
     {
       title: "Soak Cycle",

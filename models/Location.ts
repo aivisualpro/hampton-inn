@@ -7,6 +7,7 @@ export interface ILocation extends Document {
   inventoryType?: string;
   category?: string;
   items?: string[];
+  isPurchaseLocation?: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -18,6 +19,7 @@ const LocationSchema: Schema = new Schema(
     inventoryType: { type: String, required: false },
     category: { type: String, required: false },
     items: [{ type: String }], // Array of Item IDs
+    isPurchaseLocation: { type: Boolean, default: false },
   },
   {
     timestamps: true,

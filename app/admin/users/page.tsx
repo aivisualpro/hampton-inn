@@ -131,35 +131,32 @@ function LocationsMultiSelect({
   const [open, setOpen] = useState(false)
   const [inputValue, setInputValue] = useState("")
 
-  // Manual filtering so the full list always renders (cmdk's filter is disabled)
+  // Manual filtering
   const filteredOptions = inputValue
     ? options.filter((o) => o.toLowerCase().includes(inputValue.toLowerCase()))
     : options
 
   const allFilteredSelected = filteredOptions.length > 0 && filteredOptions.every((o) => value.includes(o))
 
-  const handleSelect = (currentValue: string) => {
-    const isSelected = value.includes(currentValue)
-    if (isSelected) {
-      onChange(value.filter((v) => v !== currentValue))
+  const handleSelect = (option: string) => {
+    if (value.includes(option)) {
+      onChange(value.filter((v) => v !== option))
     } else {
-      onChange([...value, currentValue])
+      onChange([...value, option])
     }
   }
 
   const handleSelectAll = () => {
     if (allFilteredSelected) {
-      // Deselect all filtered options
       onChange(value.filter((v) => !filteredOptions.includes(v)))
     } else {
-      // Select all filtered options (merge with existing)
       const newValue = Array.from(new Set([...value, ...filteredOptions]))
       onChange(newValue)
     }
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen} modal={true}>
       <PopoverTrigger asChild>
         <Button
           variant="outline"
@@ -181,51 +178,62 @@ function LocationsMultiSelect({
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[300px] p-0" style={{ overflow: 'visible' }}>
-        <Command shouldFilter={false}>
-          <CommandInput placeholder="Search locations..." value={inputValue} onValueChange={setInputValue} />
-          {/* Select All / Deselect All */}
-          <div className="border-b px-2 py-1.5">
-            <button
-              type="button"
-              onClick={handleSelectAll}
-              className="flex items-center gap-2 w-full text-sm text-muted-foreground hover:text-foreground transition-colors py-1 px-1 rounded-sm hover:bg-muted"
-            >
-              <div className={cn(
-                "h-4 w-4 rounded-sm border flex items-center justify-center transition-colors",
-                allFilteredSelected 
-                  ? "bg-primary border-primary text-primary-foreground" 
-                  : "border-input"
-              )}>
-                {allFilteredSelected && <Check className="h-3 w-3" />}
-              </div>
-              {allFilteredSelected ? "Deselect All" : "Select All"}
-              {inputValue && <span className="text-xs opacity-60">({filteredOptions.length})</span>}
-            </button>
+      <PopoverContent className="w-[300px] p-0">
+        {/* Search Input */}
+        <div className="p-2 border-b">
+          <div className="flex items-center gap-2 bg-muted/50 rounded-md px-2 py-1.5">
+            <Search className="h-4 w-4 text-muted-foreground shrink-0" />
+            <input
+              type="text"
+              placeholder="Search locations..."
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+            />
           </div>
-          <CommandList className="max-h-[300px] overflow-y-auto">
-            <CommandEmpty>No location found.</CommandEmpty>
-            <CommandGroup>
-              {filteredOptions.map((option) => (
-                <CommandItem
-                  key={option}
-                  value={option}
-                  onSelect={() => {
-                     handleSelect(option);
-                  }}
-                >
-                  <Check
-                    className={cn(
-                      "mr-2 h-4 w-4",
-                      value.includes(option) ? "opacity-100" : "opacity-0"
-                    )}
-                  />
-                  {option}
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          </CommandList>
-        </Command>
+        </div>
+        {/* Select All / Deselect All */}
+        <div className="border-b px-2 py-1.5">
+          <button
+            type="button"
+            onClick={handleSelectAll}
+            className="flex items-center gap-2 w-full text-sm text-muted-foreground hover:text-foreground transition-colors py-1 px-1 rounded-sm hover:bg-muted"
+          >
+            <div className={cn(
+              "h-4 w-4 rounded-sm border flex items-center justify-center transition-colors",
+              allFilteredSelected 
+                ? "bg-primary border-primary text-primary-foreground" 
+                : "border-input"
+            )}>
+              {allFilteredSelected && <Check className="h-3 w-3" />}
+            </div>
+            {allFilteredSelected ? "Deselect All" : "Select All"}
+            {inputValue && <span className="text-xs opacity-60">({filteredOptions.length})</span>}
+          </button>
+        </div>
+        {/* Scrollable Location List */}
+        <div className="max-h-[300px] overflow-y-auto p-1">
+          {filteredOptions.length === 0 ? (
+            <div className="py-6 text-center text-sm text-muted-foreground">No location found.</div>
+          ) : (
+            filteredOptions.map((option) => (
+              <button
+                type="button"
+                key={option}
+                onClick={() => handleSelect(option)}
+                className="flex items-center gap-2 w-full text-sm py-1.5 px-2 rounded-sm hover:bg-muted transition-colors cursor-pointer"
+              >
+                <Check
+                  className={cn(
+                    "h-4 w-4 shrink-0",
+                    value.includes(option) ? "opacity-100" : "opacity-0"
+                  )}
+                />
+                {option}
+              </button>
+            ))
+          )}
+        </div>
       </PopoverContent>
     </Popover>
   )

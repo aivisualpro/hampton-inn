@@ -443,9 +443,15 @@ export function TransactionsList({ itemId, headerContent }: TransactionsListProp
         }
 
         // Calculate effective change to apply to global totals
-        const diffUnit = closingUnitVal - (prev.unit || 0);
-        const diffPkg = closingPkgVal - (prev.pkg || 0);
+        let diffUnit = closingUnitVal - (prev.unit || 0);
+        let diffPkg = closingPkgVal - (prev.pkg || 0);
         
+        // Stock Transfers do not affect the global item balance, they just move stock between locations
+        if (t.source === "Stock Transfer") {
+            diffUnit = 0;
+            diffPkg = 0;
+        }
+
         const globalUnit = (prevGlobal.unit || 0) + diffUnit;
         const globalPkg = (prevGlobal.pkg || 0) + diffPkg;
         
@@ -476,8 +482,9 @@ export function TransactionsList({ itemId, headerContent }: TransactionsListProp
       const matchesLocation = filterLocation === "ALL" || t.location === filterLocation;
       
       let matchesDate = true;
-      if (dateRange.start && t.date < dateRange.start) matchesDate = false;
-      if (dateRange.end && t.date > dateRange.end) matchesDate = false;
+      const tDateOnly = t.date ? t.date.substring(0, 10) : "";
+      if (dateRange.start && tDateOnly < dateRange.start) matchesDate = false;
+      if (dateRange.end && tDateOnly > dateRange.end) matchesDate = false;
 
       return matchesQuery && matchesLocation && matchesDate;
   });
@@ -835,7 +842,8 @@ export function TransactionsList({ itemId, headerContent }: TransactionsListProp
                 })}
             </div>
 
-            <Table className="hidden md:table">
+            <div className="hidden md:block w-full">
+              <table className="w-full caption-bottom text-sm">
                 <TableHeader className="bg-white sticky top-0 z-10 shadow-sm">
                     <TableRow className="bg-gray-50/50 border-b">
                         <TableHead className="w-[40px] pl-4">
@@ -853,7 +861,7 @@ export function TransactionsList({ itemId, headerContent }: TransactionsListProp
                         <TableHead className="text-center">Counted</TableHead>
                         <TableHead className="text-center text-blue-600">Purchased</TableHead>
                         <TableHead className="text-center text-cyan-600">Soak</TableHead>
-                        <TableHead className="text-center text-red-600">Cons/Disp</TableHead>
+                        <TableHead className="text-center text-red-600">Cons/Disp/transf</TableHead>
                         <TableHead className="text-center font-bold bg-gray-100/50">Closing</TableHead>
                         <TableHead className="text-center font-bold text-green-700 bg-green-50/50">Balance</TableHead>
                         <TableHead className="w-[50px]"></TableHead>
@@ -1104,7 +1112,8 @@ export function TransactionsList({ itemId, headerContent }: TransactionsListProp
                         </>
                     )}
                 </TableBody>
-            </Table>
+              </table>
+            </div>
           </div>
       </div>
 

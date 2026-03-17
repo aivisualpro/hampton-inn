@@ -131,12 +131,30 @@ function LocationsMultiSelect({
   const [open, setOpen] = useState(false)
   const [inputValue, setInputValue] = useState("")
 
+  // Manual filtering so the full list always renders (cmdk's filter is disabled)
+  const filteredOptions = inputValue
+    ? options.filter((o) => o.toLowerCase().includes(inputValue.toLowerCase()))
+    : options
+
+  const allFilteredSelected = filteredOptions.length > 0 && filteredOptions.every((o) => value.includes(o))
+
   const handleSelect = (currentValue: string) => {
     const isSelected = value.includes(currentValue)
     if (isSelected) {
       onChange(value.filter((v) => v !== currentValue))
     } else {
       onChange([...value, currentValue])
+    }
+  }
+
+  const handleSelectAll = () => {
+    if (allFilteredSelected) {
+      // Deselect all filtered options
+      onChange(value.filter((v) => !filteredOptions.includes(v)))
+    } else {
+      // Select all filtered options (merge with existing)
+      const newValue = Array.from(new Set([...value, ...filteredOptions]))
+      onChange(newValue)
     }
   }
 
@@ -163,20 +181,37 @@ function LocationsMultiSelect({
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-[300px] p-0">
-        <Command>
+      <PopoverContent className="w-[300px] p-0" style={{ overflow: 'visible' }}>
+        <Command shouldFilter={false}>
           <CommandInput placeholder="Search locations..." value={inputValue} onValueChange={setInputValue} />
-          <CommandList>
+          {/* Select All / Deselect All */}
+          <div className="border-b px-2 py-1.5">
+            <button
+              type="button"
+              onClick={handleSelectAll}
+              className="flex items-center gap-2 w-full text-sm text-muted-foreground hover:text-foreground transition-colors py-1 px-1 rounded-sm hover:bg-muted"
+            >
+              <div className={cn(
+                "h-4 w-4 rounded-sm border flex items-center justify-center transition-colors",
+                allFilteredSelected 
+                  ? "bg-primary border-primary text-primary-foreground" 
+                  : "border-input"
+              )}>
+                {allFilteredSelected && <Check className="h-3 w-3" />}
+              </div>
+              {allFilteredSelected ? "Deselect All" : "Select All"}
+              {inputValue && <span className="text-xs opacity-60">({filteredOptions.length})</span>}
+            </button>
+          </div>
+          <CommandList className="max-h-[300px] overflow-y-auto">
             <CommandEmpty>No location found.</CommandEmpty>
             <CommandGroup>
-              {options.map((option) => (
+              {filteredOptions.map((option) => (
                 <CommandItem
                   key={option}
                   value={option}
-                  onSelect={(currentValue) => {
-                     // Find the exact casing from options
-                     const exactOption = options.find(o => o.toLowerCase() === currentValue.toLowerCase()) || currentValue;
-                     handleSelect(exactOption);
+                  onSelect={() => {
+                     handleSelect(option);
                   }}
                 >
                   <Check

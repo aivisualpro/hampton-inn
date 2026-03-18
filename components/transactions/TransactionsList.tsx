@@ -257,7 +257,16 @@ export function TransactionsList({ itemId, headerContent }: TransactionsListProp
     setTimeout(async () => {
       if (undone) return;
       try {
-        await Promise.all(idsToDelete.map(id => fetch(`/api/transactions/${id}`, { method: "DELETE" })));
+        const results = await Promise.all(
+          idsToDelete.map(id => fetch(`/api/transactions/${id}`, { method: "DELETE" }).then(r => r.json()))
+        );
+        // Remove any paired Stock Transfer transactions that were also deleted
+        const pairedIds = results
+          .filter(r => r.deletedPairId)
+          .map(r => r.deletedPairId);
+        if (pairedIds.length > 0) {
+          setTransactions(t => t.filter(tx => !pairedIds.includes(tx._id)));
+        }
       } catch (e) {
         console.error(e);
         setTransactions(prev); // Revert on error
@@ -339,15 +348,24 @@ export function TransactionsList({ itemId, headerContent }: TransactionsListProp
     setIsDeleteDialogOpen(false); // Close dialog immediately
     setTransactionToDelete(null);
 
+    // Check if this is a Stock Transfer (will also delete paired transaction)
+    const targetTx = transactions.find(t => t._id === id);
+    const isTransfer = targetTx?.source === "Stock Transfer";
+
     // Optimistic Update
     const prevTransactions = [...transactions];
     setTransactions(prev => prev.filter(t => t._id !== id));
-    toast({ title: "Transaction deleted", description: "The transaction has been removed." });
+    toast({ title: isTransfer ? "Transfer transactions deleted" : "Transaction deleted", description: isTransfer ? "Both transfer-in and transfer-out have been removed." : "The transaction has been removed." });
 
     try {
       const res = await fetch(`/api/transactions/${id}`, { method: "DELETE" });
       if (!res.ok) {
         throw new Error("Failed");
+      }
+      // If a paired Stock Transfer was also deleted, remove it from state
+      const data = await res.json();
+      if (data.deletedPairId) {
+        setTransactions(prev => prev.filter(t => t._id !== data.deletedPairId));
       }
     } catch (e) {
       console.error(e);

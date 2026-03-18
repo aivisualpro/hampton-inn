@@ -105,7 +105,26 @@ export async function DELETE(
       return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ message: "Transaction deleted successfully" });
+    // If this was a Stock Transfer, also delete the paired counterpart transaction
+    let deletedPairId: string | null = null;
+    if (transaction.source === "Stock Transfer") {
+      // Find the matching counterpart: same date, same item, same source,
+      // but a DIFFERENT location (the other side of the transfer)
+      const pairTransaction = await Transaction.findOneAndDelete({
+        date: transaction.date,
+        item: transaction.item,
+        source: "Stock Transfer",
+        location: { $ne: transaction.location },
+      });
+      if (pairTransaction) {
+        deletedPairId = pairTransaction._id.toString();
+      }
+    }
+
+    return NextResponse.json({
+      message: "Transaction deleted successfully",
+      deletedPairId,
+    });
   } catch (error) {
     console.error("Error deleting transaction:", error);
     return NextResponse.json({ error: "Failed to delete transaction" }, { status: 500 });

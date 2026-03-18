@@ -195,7 +195,7 @@ function StockTransferContent() {
   // Reset visible count on search or location change
   useEffect(() => {
     setVisibleCount(20);
-  }, [searchQuery, fromLocation]);
+  }, [searchQuery, fromLocation, toLocation]);
 
   // Infinite Scroll Observer
   useEffect(() => {
@@ -222,9 +222,10 @@ function StockTransferContent() {
     };
   }, [loading]);
 
-  // Fetch source items when FROM location or date changes
+  // Fetch source items when FROM location, TO location, or date changes
+  // Items are filtered based on the DESTINATION (To) location's associated items
   useEffect(() => {
-    if (!fromLocation || !selectedDate || allItems.length === 0) return;
+    if (!fromLocation || !toLocation || !selectedDate || allItems.length === 0) return;
 
     setTransferValues({});
 
@@ -239,13 +240,14 @@ function StockTransferContent() {
         const response = await fetch(`/api/stock/combined?${params}`);
         const data = await response.json();
 
-        // Get items for this location (or all items for Purchase Location)
+        // Filter items based on the DESTINATION (To) location's associated items
         let filteredItems: Item[];
-        if (fromLocation.isPurchaseLocation) {
+        if (toLocation.isPurchaseLocation) {
+          // If destination is a Purchase Location, show all items
           filteredItems = allItems;
         } else {
-          const locationItemIds = fromLocation.items || [];
-          filteredItems = allItems.filter(item => locationItemIds.includes(item._id));
+          const destinationItemIds = toLocation.items || [];
+          filteredItems = allItems.filter(item => destinationItemIds.includes(item._id));
         }
 
         const openingMap = data.openingBalances || {};
@@ -303,7 +305,7 @@ function StockTransferContent() {
     };
 
     fetchSourceStock();
-  }, [fromLocation, selectedDate, allItems]);
+  }, [fromLocation, toLocation, selectedDate, allItems]);
 
   const handleFromLocationSelect = (location: Location) => {
     setFromLocation(location);
@@ -405,12 +407,13 @@ function StockTransferContent() {
       const refreshResponse = await fetch(`/api/stock/combined?${params}`);
       const refreshData = await refreshResponse.json();
 
+      // Filter items based on the DESTINATION (To) location's associated items
       let filteredItems: Item[];
-      if (fromLocation.isPurchaseLocation) {
+      if (toLocation.isPurchaseLocation) {
         filteredItems = allItems;
       } else {
-        const locationItemIds = fromLocation.items || [];
-        filteredItems = allItems.filter(item => locationItemIds.includes(item._id));
+        const destinationItemIds = toLocation.items || [];
+        filteredItems = allItems.filter(item => destinationItemIds.includes(item._id));
       }
 
       const openingMap = refreshData.openingBalances || {};

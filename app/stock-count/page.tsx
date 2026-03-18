@@ -67,6 +67,13 @@ type ItemWithCount = Item & {
   openingBalancePackage: number;
   countedUnit: number;
   countedPackage: number;
+  purchasedUnit: number;
+  purchasedPackage: number;
+  consumedUnit: number;
+  consumedPackage: number;
+  soakUnit: number;
+  soakPackage: number;
+  hasStockCount: boolean;
 };
 
 type EditedValues = {
@@ -682,9 +689,55 @@ function StockCountContent() {
         openingBalancePackage: openingRecord?.openingBalancePackage || 0,
         countedUnit: transaction?.countedUnit || 0,
         countedPackage: transaction?.countedPackage || 0,
+        purchasedUnit: transaction?.purchasedUnit || 0,
+        purchasedPackage: transaction?.purchasedPackage || 0,
+        consumedUnit: transaction?.consumedUnit || 0,
+        consumedPackage: transaction?.consumedPackage || 0,
+        soakUnit: transaction?.soakUnit || 0,
+        soakPackage: transaction?.soakPackage || 0,
+        hasStockCount: transaction?.countedUnit !== undefined && transaction?.countedUnit !== null,
       };
     })
     .filter(Boolean) as ItemWithCount[]) || [];
+
+  // Calculate the actual closing for an item:
+  // If a stock count was done today, closing = counted value
+  // Otherwise, closing = opening + purchased + soak - consumed
+  const getClosingValues = (item: ItemWithCount): { closingUnit: number; closingPackage: number } => {
+    // If in edit mode, use the edited counted values
+    if (isEditMode) {
+      const cUnit = Number(getDisplayValue(item._id, "countedUnit") || 0);
+      const cPkg = Number(getDisplayValue(item._id, "countedPackage") || 0);
+      if (cUnit > 0 || cPkg > 0) {
+        return { closingUnit: cUnit, closingPackage: cPkg };
+      }
+    }
+
+    // If a stock count exists for today, use counted values as closing
+    if (item.hasStockCount && (item.countedUnit > 0 || item.countedPackage > 0)) {
+      return { closingUnit: item.countedUnit, closingPackage: item.countedPackage };
+    }
+
+    // Otherwise calculate: opening + purchased + soak - consumed
+    const pkgSize = getPackageSize(item.package);
+    const hasPkg = !!item.package && item.package !== "0" && pkgSize > 1;
+
+    if (hasPkg) {
+      // Work in total units to avoid cross-contamination between pkg/unit
+      const totalOpening = (item.openingBalancePackage * pkgSize) + item.openingBalanceUnit;
+      const totalPurchased = (item.purchasedPackage * pkgSize) + item.purchasedUnit;
+      const totalSoak = (item.soakUnit); // soakPackage is usually 0
+      const totalConsumed = (item.consumedPackage * pkgSize) + item.consumedUnit;
+      const totalClosing = totalOpening + totalPurchased + totalSoak - totalConsumed;
+      return {
+        closingPackage: Math.floor(totalClosing / pkgSize),
+        closingUnit: totalClosing % pkgSize,
+      };
+    } else {
+      const closingUnit = item.openingBalanceUnit + item.purchasedUnit + item.soakUnit - item.consumedUnit;
+      return { closingUnit, closingPackage: 0 };
+    }
+  };
 
   const filteredItems = locationItems.filter((item) => 
     item.item.toLowerCase().includes(searchQuery.toLowerCase())
@@ -985,9 +1038,8 @@ function StockCountContent() {
                     <div className="bg-green-50 rounded-lg p-3">
                       <p className="text-xs text-green-600 mb-1">Closing</p>
                       {(() => {
-                        const cUnit = Number(getDisplayValue(item._id, "countedUnit") || 0);
-                        const cPkg = Number(getDisplayValue(item._id, "countedPackage") || 0);
-                        const fmt = formatPkgUnit(cPkg, cUnit, item.package);
+                        const { closingUnit, closingPackage } = getClosingValues(item);
+                        const fmt = formatPkgUnit(closingPackage, closingUnit, item.package);
                         if (typeof fmt === 'string') return <p className="text-lg font-bold text-green-700">{fmt}</p>;
                         return (
                           <>
@@ -1017,8 +1069,7 @@ function StockCountContent() {
                   {displayedItems.map((item) => {
                     const hasPkg = !!item.package && item.package !== "0" && getPackageSize(item.package) > 1;
                     const openingFmt = formatPkgUnit(item.openingBalancePackage, item.openingBalanceUnit, item.package);
-                    const cUnit = Number(getDisplayValue(item._id, "countedUnit") || 0);
-                    const cPkg = Number(getDisplayValue(item._id, "countedPackage") || 0);
+                    const { closingUnit: cUnit, closingPackage: cPkg } = getClosingValues(item);
                     const closingFmt = formatPkgUnit(cPkg, cUnit, item.package);
                     const countFmt = formatPkgUnit(item.countedPackage, item.countedUnit, item.package);
                     

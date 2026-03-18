@@ -108,8 +108,8 @@ export default function ItemDetailsPage() {
   const grandTotalCount = (totalPackages * packageSize) + totalUnits;
 
   return (
-    <div className="flex h-full flex-col gap-6 p-6">
-      <div className="flex items-center justify-between">
+    <div className="flex h-full flex-col overflow-hidden">
+      <div className="flex-none flex items-center justify-between p-6 pb-3">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <Link href="/" className="hover:text-primary hover:underline">Home</Link>
           <ChevronRight className="h-4 w-4" />
@@ -129,9 +129,9 @@ export default function ItemDetailsPage() {
         </div>
       </div>
 
-      <div className="grid h-full grid-cols-1 gap-6 md:grid-cols-5">
+      <div className="grid flex-1 grid-cols-1 gap-6 px-6 pb-6 md:grid-cols-5 overflow-hidden">
         {/* Left Column - 40% */}
-        <div className="col-span-1 flex flex-col gap-6 md:col-span-2">
+        <div className="col-span-1 flex flex-col gap-6 md:col-span-2 overflow-auto">
           {/* Item Details Card */}
           <Card>
             <CardHeader>

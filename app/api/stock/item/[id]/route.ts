@@ -10,6 +10,8 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
+    const url = new URL(request.url);
+    const endDate = url.searchParams.get("endDate");
     await dbConnect();
     
     // Validate Item ID
@@ -77,6 +79,11 @@ export async function GET(
            for (const tx of group.counts) {
                if (tx.date) {
                    const tTime = new Date(tx.date).getTime();
+                   if (endDate) {
+                       const txDateStr = typeof tx.date === "string" ? tx.date : (tx.date instanceof Date ? tx.date.toISOString() : "");
+                       const tDateOnly = txDateStr.substring(0, 10);
+                       if (tDateOnly > endDate) continue;
+                   }
                    if (!latestCountTx || tTime > new Date(latestCountTx.date).getTime()) {
                        latestCountTx = tx;
                    }
@@ -91,13 +98,20 @@ export async function GET(
            // 2. Sum Deltas strictly AFTER the cutoff
            let groupDelta = 0;
            for (const tx of group.deltas) {
-               if (tx.date && new Date(tx.date).getTime() > cutoffTime) {
-                    const purchased = (tx.purchasedUnit || 0) + ((tx.purchasedPackage || 0) * packageSize);
-                    const soak = (tx.soakUnit || 0);
-                    const consumed = (tx.consumedUnit || 0) + ((tx.consumedPackage || 0) * packageSize);
-                    
-                    // Note: TransactionsList ADDS soak. So we add it here too.
-                    groupDelta += (purchased + soak - consumed);
+               if (tx.date) {
+                   if (endDate) {
+                       const txDateStr = typeof tx.date === "string" ? tx.date : (tx.date instanceof Date ? tx.date.toISOString() : "");
+                       const tDateOnly = txDateStr.substring(0, 10);
+                       if (tDateOnly > endDate) continue;
+                   }
+                   if (new Date(tx.date).getTime() > cutoffTime) {
+                        const purchased = (tx.purchasedUnit || 0) + ((tx.purchasedPackage || 0) * packageSize);
+                        const soak = (tx.soakUnit || 0);
+                        const consumed = (tx.consumedUnit || 0) + ((tx.consumedPackage || 0) * packageSize);
+                        
+                        // Note: TransactionsList ADDS soak. So we add it here too.
+                        groupDelta += (purchased + soak - consumed);
+                   }
                }
            }
            

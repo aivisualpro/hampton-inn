@@ -47,33 +47,43 @@ export default function ItemDetailsPage() {
   const [item, setItem] = useState<Item | null>(null);
   const [stockBreakdown, setStockBreakdown] = useState<StockBreakdown[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filterEndDate, setFilterEndDate] = useState<string>("");
 
+  // Fetch Item Details
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchItem = async () => {
       if (!id) return;
       setLoading(true);
       try {
-        const [itemRes, stockRes] = await Promise.all([
-          fetch(`/api/items/${id}`, { cache: 'no-store' }),
-          fetch(`/api/stock/item/${id}`, { cache: 'no-store' }),
-        ]);
-
+        const itemRes = await fetch(`/api/items/${id}`, { cache: 'no-store' });
         if (itemRes.ok) {
           setItem(await itemRes.json());
         }
-
-        if (stockRes.ok) {
-          setStockBreakdown(await stockRes.json());
-        }
       } catch (error) {
-        console.error("Error fetching details:", error);
+        console.error("Error fetching item details:", error);
       } finally {
         setLoading(false);
       }
     };
-
-    fetchData();
+    fetchItem();
   }, [id]);
+
+  // Fetch Stock Breakdown (reacts to date filter)
+  useEffect(() => {
+    const fetchStock = async () => {
+      if (!id) return;
+      try {
+        const url = filterEndDate ? `/api/stock/item/${id}?endDate=${filterEndDate}` : `/api/stock/item/${id}`;
+        const stockRes = await fetch(url, { cache: 'no-store' });
+        if (stockRes.ok) {
+          setStockBreakdown(await stockRes.json());
+        }
+      } catch (error) {
+        console.error("Error fetching stock details:", error);
+      }
+    };
+    fetchStock();
+  }, [id, filterEndDate]);
 
   if (loading) {
     return (
@@ -228,7 +238,10 @@ export default function ItemDetailsPage() {
         {/* Right Column - 60% */}
         <div className="col-span-1 flex flex-col md:col-span-3 h-full overflow-hidden">
             <div className="bg-white border rounded-lg h-full overflow-hidden shadow-sm">
-                <TransactionsList itemId={id} />
+                <TransactionsList 
+                  itemId={id} 
+                  onDateChange={(range) => setFilterEndDate(range.end)}
+                />
             </div>
         </div>
       </div>

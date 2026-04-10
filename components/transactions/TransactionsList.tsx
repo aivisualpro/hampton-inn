@@ -124,9 +124,10 @@ type Location = {
 interface TransactionsListProps {
     itemId?: string;
     headerContent?: React.ReactNode;
+    onDateChange?: (range: { start: string; end: string }) => void;
 }
 
-export function TransactionsList({ itemId, headerContent }: TransactionsListProps) {
+export function TransactionsList({ itemId, headerContent, onDateChange }: TransactionsListProps) {
     const [loading, setLoading] = useState(true);
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [items, setItems] = useState<Record<string, Item>>({});
@@ -336,6 +337,12 @@ export function TransactionsList({ itemId, headerContent }: TransactionsListProp
         setEditingTransaction({ ...t });
         setIsEditDialogOpen(true);
     };
+
+    useEffect(() => {
+        if (onDateChange) {
+            onDateChange(dateRange);
+        }
+    }, [dateRange, onDateChange]);
 
     const handleDeleteClick = (id: string) => {
         setTransactionToDelete(id);
